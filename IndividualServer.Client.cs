@@ -39,7 +39,7 @@ namespace RainMeadow.IndividualServer
                 RainMeadow.Debug($"Removing client: {endPoint}, {routerID}");
                 if (peerManager is null) throw new InvalidProgrammerException("peerManager is null");
                 peerManager.OnPeerForgotten -= OnPeerForgotten;
-                
+
                 if (clients.Contains(this))
                 {
                     clients.Remove(this);
@@ -76,9 +76,16 @@ namespace RainMeadow.IndividualServer
 
         static void RouteSessionData_ProcessAction(RouteSessionData packet)
         {
-            var srcRoutingID = clients.First(x => UDPPeerManager.CompareIPEndpoints(packet.processingEndpoint, x.endPoint)).routerID;
-            var destinationClient = clients.First(x => x.routerID == packet.processingRouterID);
-            destinationClient.Send(new RouteSessionData(srcRoutingID, packet.data, (ushort)(packet.size - sizeof(ushort))), UDPPeerManager.PacketType.Unreliable);
+            var actualSrcRouterID = clients.First(x => UDPPeerManager.CompareIPEndpoints(packet.processingEndpoint, x.endPoint)).routerID;
+            if (packet.fromRouterID != actualSrcRouterID) {
+                RainMeadow.Error("Impersonation attempt! assumed "+ actualSrcRouterID.ToString() + " disguised as " + packet.fromRouterID.ToString());
+                return;
+            }
+            var destinationClient = clients.First(x => x.routerID == packet.toRouterID);
+            destinationClient.Send(
+                new RouteSessionData(destinationClient.routerID, actualSrcRouterID, packet.data, packet.size),
+                UDPPeerManager.PacketType.Unreliable
+            );
         }
 
         const ushort nullrouterID = 0;
@@ -106,7 +113,7 @@ namespace RainMeadow.IndividualServer
             if (id == nullrouterID)
             {
                 RainMeadow.Error("No available RouterIDs");
-                return;    
+                return;
             }
 
             var newClient = new Client(packet.processingEndpoint, id, packet.exposeIPAddress);
