@@ -12,4 +12,13 @@
     <RootNamespace>RainMeadow</RootNamespace>
   </PropertyGroup>
 
+  <ItemGroup>
+    <Reference Include="lib\*.dll" Private="False" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Remove=".gitattributes" />
+    <None Remove=".gitignore" />
+  </ItemGroup>
+
 </Project>

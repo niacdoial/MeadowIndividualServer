@@ -15,12 +15,14 @@ namespace RainMeadow.IndividualServer
         {
             public readonly ushort routerID;
             public readonly IPEndPoint endPoint;
+            public readonly string name;
             public readonly bool exposeIPAddress;
-            public Client(IPEndPoint endPoint, ushort routerID, bool exposeIPAddress)
+            public Client(IPEndPoint endPoint, ushort routerID, bool exposeIPAddress, string name="")
             {
-                RainMeadow.Debug($"New client: {endPoint}, {routerID}");
+                RainMeadow.Debug($"New client: {endPoint}, {routerID}, {name}");
                 this.routerID = routerID;
                 this.endPoint = endPoint;
+                this.name = name;
                 this.exposeIPAddress = exposeIPAddress;
 
                 if (peerManager is null) throw new InvalidProgrammerException("peerManager is null");
@@ -116,17 +118,32 @@ namespace RainMeadow.IndividualServer
                 return;
             }
 
-            var newClient = new Client(packet.processingEndpoint, id, packet.exposeIPAddress);
+            var newClient = new Client(packet.processingEndpoint, id, packet.exposeIPAddress, packet.name);
+            var useEndpoint = SharedPlatform.BlackHole;
+            if (packet.exposeIPAddress) {
+                useEndpoint = packet.processingEndpoint;
+            }
+
             foreach (Client client in clients)
             {
                 if (newClient == client)
                 {
-                    client.Send(new RouterModifyPlayerListPacket(RouterModifyPlayerListPacket.Operation.Add, clients.Select(x => x.routerID).ToList()),
+                    client.Send(new RouterModifyPlayerListPacket(
+                        RouterModifyPlayerListPacket.Operation.Add,
+                        clients.Select(x => x.routerID).ToList(),
+                        clients.Select(x => x.endPoint).ToList(),
+                        clients.Select(x => x.name).ToList()
+                        ),
                         UDPPeerManager.PacketType.Reliable);
                     continue;
                 }
 
-                client.Send(new RouterModifyPlayerListPacket(RouterModifyPlayerListPacket.Operation.Add, new List<ushort> { id }),
+                client.Send(new RouterModifyPlayerListPacket(
+                    RouterModifyPlayerListPacket.Operation.Add,
+                    new List<ushort> { id },
+                    new List<IPEndPoint> { useEndpoint },
+                    new List<string> { packet.name }
+                    ),
                     UDPPeerManager.PacketType.Reliable);
             }
 
