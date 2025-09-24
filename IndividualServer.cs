@@ -38,17 +38,13 @@ namespace RainMeadow.IndividualServer
         [CommandLineArgument]
         public static string bannedMods = "";
 
-        static UDPPeerManager? peerManager = null; 
+        static UDPPeerManager? peerManager = null;
         static void Main(string[] args)
         {
 
-
-            
-            
             SharedCodeLogger.DebugInner += RainMeadow.Debug;
             SharedCodeLogger.DebugMeInner += RainMeadow.DebugMe;
             SharedCodeLogger.ErrorInner += RainMeadow.Error;
-            
 
             RainMeadow.Debug("Hello world!");
             try
@@ -73,7 +69,7 @@ namespace RainMeadow.IndividualServer
 
             RainMeadow.Debug(Stopwatch.Frequency);
 
-            // Todo: Alert matchmaking server that we've successfully started listening on a new port 
+            // Todo: Alert matchmaking server that we've successfully started listening on a new port
 
             // Main Lobby
             while (true)

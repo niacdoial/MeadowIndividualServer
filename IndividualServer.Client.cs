@@ -90,6 +90,26 @@ namespace RainMeadow.IndividualServer
             );
         }
 
+        static void EndRouterSession_ProcessAction(EndRouterSession packet)
+        {
+            var selfIndex = clients.FindIndex(x => x.endPoint == packet.processingEndpoint);
+            if (selfIndex == -1) {
+                RainMeadow.Error("Client that's not there wishes to leave");
+            }
+            Client self = clients.ElementAt(selfIndex);
+            clients.RemoveAt(selfIndex);
+
+            var notifyPacket = new RouterModifyPlayerListPacket(
+                RouterModifyPlayerListPacket.Operation.Remove,
+                new List<ushort> { self.routerId }
+            );
+
+            foreach (Client client in clients)
+            {
+                client.Send(notifyPacket, UDPPeerManager.PacketType.Reliable);
+            }
+        }
+
         const ushort nullrouterID = 0;
         static void BeginRouterSession_ProcessAction(BeginRouterSession packet)
         {
@@ -100,16 +120,20 @@ namespace RainMeadow.IndividualServer
 
             if (usedIDs.Any())
             {
-                try
-                {
-                    var possibleIDs = usedIDs.Select(x => (ushort)(x + 1));
-                    id = possibleIDs.Except(usedIDs).Where(x => x != 0).First();
-                }
-                catch (InvalidOperationException exception)
-                {
-                    RainMeadow.Error(exception);
-                    return;
-                }
+                // let's make things more straightforward in case people leave and others join:
+                // let's avoid clients mixing different clients because of a re-used ID
+                // (maybe reintroduce this allocation optimisation later)
+                id = usedIDs.Max() +1;
+                // try
+                // {
+                //     var possibleIDs = usedIDs.Select(x => (ushort)(x + 1));
+                //     id = possibleIDs.Except(usedIDs).Where(x => x != 0).First();
+                // }
+                // catch (InvalidOperationException exception)
+                // {
+                //     RainMeadow.Error(exception);
+                //     return;
+                // }
             }
 
             if (id == nullrouterID)
@@ -124,6 +148,12 @@ namespace RainMeadow.IndividualServer
                 useEndpoint = packet.processingEndpoint;
             }
 
+            var notifyPacket = new RouterModifyPlayerListPacket(
+                RouterModifyPlayerListPacket.Operation.Add,
+                new List<ushort> { id },
+                new List<IPEndPoint> { useEndpoint },
+                new List<string> { packet.name }
+            );
             foreach (Client client in clients)
             {
                 if (newClient == client)
@@ -135,16 +165,11 @@ namespace RainMeadow.IndividualServer
                         clients.Select(x => x.name).ToList()
                         ),
                         UDPPeerManager.PacketType.Reliable);
-                    continue;
                 }
-
-                client.Send(new RouterModifyPlayerListPacket(
-                    RouterModifyPlayerListPacket.Operation.Add,
-                    new List<ushort> { id },
-                    new List<IPEndPoint> { useEndpoint },
-                    new List<string> { packet.name }
-                    ),
-                    UDPPeerManager.PacketType.Reliable);
+                else
+                {
+                    client.Send(notifyPacket, UDPPeerManager.PacketType.Reliable);
+                }
             }
 
             newClient.Send(new JoinRouterLobby(id, maxplayers, name, passwordprotected, mode, mods, bannedMods), UDPPeerManager.PacketType.Reliable);
