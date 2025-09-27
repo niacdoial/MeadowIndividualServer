@@ -20,7 +20,7 @@ namespace RainMeadow.IndividualServer
             public readonly bool exposeIPAddress;
             public Client(IPEndPoint endPoint, ushort routerID, bool exposeIPAddress, string name="")
             {
-                RainMeadow.Debug($"New client: {endPoint}, {routerID}, {name}");
+                RainMeadow.Debug($"New client: {routerID}, {name}");
                 this.routerID = routerID;
                 this.endPoint = endPoint;
                 this.name = name;
@@ -44,7 +44,7 @@ namespace RainMeadow.IndividualServer
 
                 if (clients.Contains(this))
                 {
-                    RainMeadow.Debug($"Removing client: {endPoint}, {routerID}");
+                    RainMeadow.Debug($"Removing client: {routerID}");
                     clients.Remove(this);
 
                     var removalPacket = new RouterModifyPlayerListPacket(RouterModifyPlayerListPacket.Operation.Remove, new List<ushort> { routerID });
@@ -109,8 +109,7 @@ namespace RainMeadow.IndividualServer
         {
             var self = clients.FirstOrDefault(x => UDPPeerManager.CompareIPEndpoints(x.endPoint, packet.processingEndpoint));
             if (self == null) {
-                RainMeadow.Error("Client that's not there wishes to leave: " + packet.processingEndpoint.ToString());
-                PrintRemainingClients();
+                RainMeadow.Error("Client that's not there wishes to leave...");
                 return;
             }
             RainMeadow.Debug("Client leaving...");
