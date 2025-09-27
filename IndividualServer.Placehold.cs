@@ -33,5 +33,13 @@ namespace RainMeadow.IndividualServer
                 bannedMods = packet.bannedMods;
             }
         }
+
+        static void PrintRemainingClients()
+        {
+            RainMeadow.Debug("Client list:");
+            foreach (Client client in clients) {
+                RainMeadow.Debug(String.Format("  ID: {0}, endPoint: {1}, name: {2}", client.routerID, client.endPoint, client.name));
+            }
+        }
     }
 }

@@ -37,15 +37,16 @@ namespace RainMeadow.IndividualServer
                 if (this.endPoint == forgottenEndPoint) RemoveClient();
             }
 
-            private void RemoveClient()
+            public void RemoveClient()
             {
-                RainMeadow.Debug($"Removing client: {endPoint}, {routerID}");
                 if (peerManager is null) throw new InvalidProgrammerException("peerManager is null");
                 peerManager.OnPeerForgotten -= OnPeerForgotten;
 
                 if (clients.Contains(this))
                 {
+                    RainMeadow.Debug($"Removing client: {endPoint}, {routerID}");
                     clients.Remove(this);
+
                     var removalPacket = new RouterModifyPlayerListPacket(RouterModifyPlayerListPacket.Operation.Remove, new List<ushort> { routerID });
                     Send(removalPacket, UDPPeerManager.PacketType.Reliable); // TODO: why is this needed?
                     foreach (Client client in clients)
@@ -53,6 +54,7 @@ namespace RainMeadow.IndividualServer
                         client.Send(removalPacket, UDPPeerManager.PacketType.Reliable);
                     }
                     peerManager.ForgetPeer(endPoint);
+                    PrintRemainingClients();
                 }
             }
 
@@ -75,16 +77,24 @@ namespace RainMeadow.IndividualServer
             BeginRouterSession.ProcessAction += BeginRouterSession_ProcessAction;
             RouteSessionData.ProcessAction += RouteSessionData_ProcessAction;
             PublishRouterLobby.ProcessAction += PublishRouterLobby_ProcessAction;
+            EndRouterSession.ProcessAction += EndRouterSession_ProcessAction;
         }
 
         static void RouteSessionData_ProcessAction(RouteSessionData packet)
         {
-            var actualSrcRouterID = clients.First(x => UDPPeerManager.CompareIPEndpoints(packet.processingEndpoint, x.endPoint)).routerID;
-            if (packet.fromRouterID != actualSrcRouterID) {
-                RainMeadow.Error("Impersonation attempt! assumed "+ actualSrcRouterID.ToString() + " disguised as " + packet.fromRouterID.ToString());
+            var actualSrcRouterID = clients.FirstOrDefault(x => UDPPeerManager.CompareIPEndpoints(packet.processingEndpoint, x.endPoint)).routerID;
+            if (actualSrcRouterID == 0) {
+                RainMeadow.Error("Impersonation attempt! unknown sender disguised as " + packet.fromRouterID.ToString());
+                return;
+            }else if (packet.fromRouterID != actualSrcRouterID) {
+                RainMeadow.Error("Impersonation attempt! probably-player-"+ actualSrcRouterID.ToString() + " disguised as " + packet.fromRouterID.ToString());
                 return;
             }
-            var destinationClient = clients.First(x => x.routerID == packet.toRouterID);
+            var destinationClient = clients.FirstOrDefault(x => x.routerID == packet.toRouterID);
+            if (destinationClient == null) {
+                RainMeadow.Error("received packet for departed client " + packet.toRouterID.ToString());
+                return;
+            }
             destinationClient.Send(
                 new RouteSessionData(destinationClient.routerID, actualSrcRouterID, packet.data, (ushort)packet.data.Length),
                 UDPPeerManager.PacketType.Unreliable
@@ -93,22 +103,14 @@ namespace RainMeadow.IndividualServer
 
         static void EndRouterSession_ProcessAction(EndRouterSession packet)
         {
-            var selfIndex = clients.FindIndex(x => x.endPoint == packet.processingEndpoint);
-            if (selfIndex == -1) {
-                RainMeadow.Error("Client that's not there wishes to leave");
+            var self = clients.FirstOrDefault(x => UDPPeerManager.CompareIPEndpoints(x.endPoint, packet.processingEndpoint));
+            if (self == null) {
+                RainMeadow.Error("Client that's not there wishes to leave: " + packet.processingEndpoint.ToString());
+                PrintRemainingClients();
+                return;
             }
-            Client self = clients.ElementAt(selfIndex);
-            clients.RemoveAt(selfIndex);
-
-            var notifyPacket = new RouterModifyPlayerListPacket(
-                RouterModifyPlayerListPacket.Operation.Remove,
-                new List<ushort> { self.routerID }
-            );
-
-            foreach (Client client in clients)
-            {
-                client.Send(notifyPacket, UDPPeerManager.PacketType.Reliable);
-            }
+            RainMeadow.Debug("Client leaving...");
+            self.RemoveClient();
         }
 
         const ushort nullrouterID = 0;
@@ -185,6 +187,7 @@ namespace RainMeadow.IndividualServer
             }
 
             newClient.Send(new JoinRouterLobby(id, maxplayers, name, passwordprotected, mode, mods, bannedMods), UDPPeerManager.PacketType.Reliable);
+            PrintRemainingClients();
         }
     }
 
