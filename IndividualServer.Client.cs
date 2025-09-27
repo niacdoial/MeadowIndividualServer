@@ -15,6 +15,7 @@ namespace RainMeadow.IndividualServer
         {
             public readonly ushort routerID;
             public readonly IPEndPoint endPoint;
+            public IPEndPoint publicEndPoint { get { if (exposeIPAddress) return endPoint; else return SharedPlatform.BlackHole; } }
             public readonly string name;
             public readonly bool exposeIPAddress;
             public Client(IPEndPoint endPoint, ushort routerID, bool exposeIPAddress, string name="")
@@ -28,7 +29,7 @@ namespace RainMeadow.IndividualServer
                 if (peerManager is null) throw new InvalidProgrammerException("peerManager is null");
                 clients.Add(this);
                 peerManager.GetRemotePeer(endPoint, true); // create remotePeer
-                peerManager.OnPeerForgotten += OnPeerForgotten;
+                peerManager.OnPeerForgotten += OnPeerForgotten;  // TODO doesn't this accumulate?
             }
 
             private void OnPeerForgotten(IPEndPoint forgottenEndPoint)
@@ -45,12 +46,11 @@ namespace RainMeadow.IndividualServer
                 if (clients.Contains(this))
                 {
                     clients.Remove(this);
-                    Send(new RouterModifyPlayerListPacket(RouterModifyPlayerListPacket.Operation.Remove, new List<ushort> { routerID }),
-                            UDPPeerManager.PacketType.Reliable);
+                    var removalPacket = new RouterModifyPlayerListPacket(RouterModifyPlayerListPacket.Operation.Remove, new List<ushort> { routerID });
+                    Send(removalPacket, UDPPeerManager.PacketType.Reliable); // TODO: why is this needed?
                     foreach (Client client in clients)
                     {
-                        client.Send(new RouterModifyPlayerListPacket(RouterModifyPlayerListPacket.Operation.Remove, new List<ushort> { routerID }),
-                            UDPPeerManager.PacketType.Reliable);
+                        client.Send(removalPacket, UDPPeerManager.PacketType.Reliable);
                     }
                     peerManager.ForgetPeer(endPoint);
                 }
@@ -74,6 +74,7 @@ namespace RainMeadow.IndividualServer
             Packet.packetFactory += Packet.RouterFactory;
             BeginRouterSession.ProcessAction += BeginRouterSession_ProcessAction;
             RouteSessionData.ProcessAction += RouteSessionData_ProcessAction;
+            PublishRouterLobby.ProcessAction += PublishRouterLobby_ProcessAction;
         }
 
         static void RouteSessionData_ProcessAction(RouteSessionData packet)
@@ -85,7 +86,7 @@ namespace RainMeadow.IndividualServer
             }
             var destinationClient = clients.First(x => x.routerID == packet.toRouterID);
             destinationClient.Send(
-                new RouteSessionData(destinationClient.routerID, actualSrcRouterID, packet.data, packet.size),
+                new RouteSessionData(destinationClient.routerID, actualSrcRouterID, packet.data, (ushort)packet.data.Length),
                 UDPPeerManager.PacketType.Unreliable
             );
         }
@@ -101,7 +102,7 @@ namespace RainMeadow.IndividualServer
 
             var notifyPacket = new RouterModifyPlayerListPacket(
                 RouterModifyPlayerListPacket.Operation.Remove,
-                new List<ushort> { self.routerId }
+                new List<ushort> { self.routerID }
             );
 
             foreach (Client client in clients)
@@ -115,6 +116,21 @@ namespace RainMeadow.IndividualServer
         {
             if (clients.Any(x => x.endPoint == packet.processingEndpoint)) return;
 
+            if (clients.Count() == 0) {
+                RainMeadow.Debug("first player! let them be host");
+                var hostClient = new Client(packet.processingEndpoint, 1, packet.exposeIPAddress, packet.name);
+                hostClient.Send(new LobbyIsEmpty(), UDPPeerManager.PacketType.Reliable);
+                hostClient.Send(new RouterModifyPlayerListPacket(
+                    RouterModifyPlayerListPacket.Operation.Add,
+                    clients.Select(x => x.routerID).ToList(),
+                    clients.Select(x => x.publicEndPoint).ToList(),
+                    clients.Select(x => x.name).ToList()
+                    ),
+                    UDPPeerManager.PacketType.Reliable
+                );
+                return;
+            }
+
             var usedIDs = clients.Select(x => x.routerID);
             ushort id = 1;
 
@@ -123,7 +139,7 @@ namespace RainMeadow.IndividualServer
                 // let's make things more straightforward in case people leave and others join:
                 // let's avoid clients mixing different clients because of a re-used ID
                 // (maybe reintroduce this allocation optimisation later)
-                id = usedIDs.Max() +1;
+                id = (ushort)(usedIDs.Max() + 1);
                 // try
                 // {
                 //     var possibleIDs = usedIDs.Select(x => (ushort)(x + 1));
@@ -143,15 +159,11 @@ namespace RainMeadow.IndividualServer
             }
 
             var newClient = new Client(packet.processingEndpoint, id, packet.exposeIPAddress, packet.name);
-            var useEndpoint = SharedPlatform.BlackHole;
-            if (packet.exposeIPAddress) {
-                useEndpoint = packet.processingEndpoint;
-            }
 
             var notifyPacket = new RouterModifyPlayerListPacket(
                 RouterModifyPlayerListPacket.Operation.Add,
                 new List<ushort> { id },
-                new List<IPEndPoint> { useEndpoint },
+                new List<IPEndPoint> { newClient.publicEndPoint },
                 new List<string> { packet.name }
             );
             foreach (Client client in clients)
@@ -161,7 +173,7 @@ namespace RainMeadow.IndividualServer
                     client.Send(new RouterModifyPlayerListPacket(
                         RouterModifyPlayerListPacket.Operation.Add,
                         clients.Select(x => x.routerID).ToList(),
-                        clients.Select(x => x.endPoint).ToList(),
+                        clients.Select(x => x.publicEndPoint).ToList(),
                         clients.Select(x => x.name).ToList()
                         ),
                         UDPPeerManager.PacketType.Reliable);
