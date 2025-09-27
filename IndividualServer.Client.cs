@@ -78,27 +78,31 @@ namespace RainMeadow.IndividualServer
             RouteSessionData.ProcessAction += RouteSessionData_ProcessAction;
             PublishRouterLobby.ProcessAction += PublishRouterLobby_ProcessAction;
             EndRouterSession.ProcessAction += EndRouterSession_ProcessAction;
+            RouterChatMessage.ProcessAction += ChatMessage_ProcessAction;
+        }
+
+        static bool CheckSender(IPEndPoint processingEndpoint, ushort fromRouterID)
+        {
+            var actualSrcRouterID = clients.FirstOrDefault(x => UDPPeerManager.CompareIPEndpoints(processingEndpoint, x.endPoint)).routerID;
+            if (actualSrcRouterID == 0) {
+                RainMeadow.Error("Impersonation attempt! unknown sender disguised as " + fromRouterID.ToString());
+                return false;
+            } else if (fromRouterID != actualSrcRouterID) {
+                RainMeadow.Error("Impersonation attempt! probably-player-"+ actualSrcRouterID.ToString() + " disguised as " + fromRouterID.ToString());
+                return false;
+            }
+            return true;
         }
 
         static void RouteSessionData_ProcessAction(RouteSessionData packet)
         {
-            var actualSrcRouterID = clients.FirstOrDefault(x => UDPPeerManager.CompareIPEndpoints(packet.processingEndpoint, x.endPoint)).routerID;
-            if (actualSrcRouterID == 0) {
-                RainMeadow.Error("Impersonation attempt! unknown sender disguised as " + packet.fromRouterID.ToString());
-                return;
-            }else if (packet.fromRouterID != actualSrcRouterID) {
-                RainMeadow.Error("Impersonation attempt! probably-player-"+ actualSrcRouterID.ToString() + " disguised as " + packet.fromRouterID.ToString());
-                return;
-            }
+            if (!CheckSender(packet.processingEndpoint, packet.fromRouterID)) { return; }
             var destinationClient = clients.FirstOrDefault(x => x.routerID == packet.toRouterID);
             if (destinationClient == null) {
                 RainMeadow.Error("received packet for departed client " + packet.toRouterID.ToString());
                 return;
             }
-            destinationClient.Send(
-                new RouteSessionData(destinationClient.routerID, actualSrcRouterID, packet.data, (ushort)packet.data.Length),
-                UDPPeerManager.PacketType.Unreliable
-            );
+            destinationClient.Send(packet, UDPPeerManager.PacketType.Unreliable);
         }
 
         static void EndRouterSession_ProcessAction(EndRouterSession packet)
@@ -188,6 +192,17 @@ namespace RainMeadow.IndividualServer
 
             newClient.Send(new JoinRouterLobby(id, maxplayers, name, passwordprotected, mode, mods, bannedMods), UDPPeerManager.PacketType.Reliable);
             PrintRemainingClients();
+        }
+
+        static void ChatMessage_ProcessAction(RouterChatMessage packet)
+        {
+            if (!CheckSender(packet.processingEndpoint, packet.fromRouterID)) { return; }
+
+            foreach (Client client in clients)
+            {
+                if (client.exposeIPAddress || client.routerID == packet.fromRouterID) { continue; }
+                client.Send(packet, UDPPeerManager.PacketType.Reliable);
+            }
         }
     }
 
