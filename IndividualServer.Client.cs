@@ -79,6 +79,7 @@ namespace RainMeadow.IndividualServer
             PublishRouterLobby.ProcessAction += PublishRouterLobby_ProcessAction;
             EndRouterSession.ProcessAction += EndRouterSession_ProcessAction;
             RouterChatMessage.ProcessAction += ChatMessage_ProcessAction;
+            RouterCustomPacket.ProcessAction += RouterCustomPacket_ProcessAction;
         }
 
         static bool CheckSender(IPEndPoint processingEndpoint, ushort fromRouterID)
@@ -95,6 +96,17 @@ namespace RainMeadow.IndividualServer
         }
 
         static void RouteSessionData_ProcessAction(RouteSessionData packet)
+        {
+            if (!CheckSender(packet.processingEndpoint, packet.fromRouterID)) { return; }
+            var destinationClient = clients.FirstOrDefault(x => x.routerID == packet.toRouterID);
+            if (destinationClient == null) {
+                RainMeadow.Error("received packet for departed client " + packet.toRouterID.ToString());
+                return;
+            }
+            destinationClient.Send(packet, UDPPeerManager.PacketType.Unreliable);
+        }
+
+        static void RouterCustomPacket_ProcessAction(RouterCustomPacket packet)
         {
             if (!CheckSender(packet.processingEndpoint, packet.fromRouterID)) { return; }
             var destinationClient = clients.FirstOrDefault(x => x.routerID == packet.toRouterID);
