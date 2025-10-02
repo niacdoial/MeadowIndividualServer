@@ -54,10 +54,10 @@ namespace RainMeadow.IndividualServer
 
                 peerManager = new(port, 10000);
                 RainMeadow.Debug($"Hosting on port {peerManager.port}");
-                peerManager.OnPeerForgotten += x =>
-                {
-                    RainMeadow.Debug($"{x} was forgotten");
-                };
+                // peerManager.OnPeerForgotten += x =>
+                // {
+                //     RainMeadow.Debug($"{x} was forgotten");
+                // };
 
                 SetupClientEvents();
             }

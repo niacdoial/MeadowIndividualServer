@@ -4,7 +4,7 @@ using System.Runtime.CompilerServices;
 
 namespace RainMeadow
 {
-    
+
     public class InvalidProgrammerException : InvalidOperationException
     {
         public InvalidProgrammerException(string message) : base(message + " you goof") { }
@@ -25,7 +25,7 @@ namespace RainMeadow
         public static void Error(object data, [CallerFilePath] string callerFile = "", [CallerMemberName] string callerName = "")
         {
             Console.WriteLine($"{LogDOT()}|{TrimCaller(callerFile)}.{callerName}:{data}");
-            Stacktrace();
+            //Stacktrace();
         }
 
         public static void Stacktrace()
