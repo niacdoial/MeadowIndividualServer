@@ -193,10 +193,16 @@ namespace RainMeadow.IndividualServer
             {
                 if (newClient == client)
                 {
+                    // if somebody masks their IP, they don't get to learn any one else's
+                    var endPointList = clients.Select(x => SharedPlatform.BlackHole).ToList();
+                    if (client.exposeIPAddress) {
+                        endPointList = clients.Select(x => x.publicEndPoint).ToList();
+                    }
+
                     client.Send(new RouterModifyPlayerListPacket(
                         RouterModifyPlayerListPacket.Operation.Add,
                         clients.Select(x => x.routerID).ToList(),
-                        clients.Select(x => x.publicEndPoint).ToList(),
+                        endPointList,
                         clients.Select(x => x.name).ToList()
                         ),
                         UDPPeerManager.PacketType.Reliable);
@@ -214,10 +220,10 @@ namespace RainMeadow.IndividualServer
         static void ChatMessage_ProcessAction(RouterChatMessage packet)
         {
             if (!CheckSender(packet.processingEndpoint, packet.fromRouterID)) { return; }
-
+            var senderClient = clients.FirstOrDefault(x => x.routerID == packet.fromRouterID);
             foreach (Client client in clients)
             {
-                if (client.exposeIPAddress || client.routerID == packet.fromRouterID) { continue; }
+                if ((senderClient.exposeIPAddress && client.exposeIPAddress) || client.routerID == packet.fromRouterID) { continue; }
                 client.Send(packet, UDPPeerManager.PacketType.Reliable);
             }
         }
