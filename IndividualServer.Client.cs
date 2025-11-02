@@ -14,11 +14,11 @@ namespace RainMeadow.IndividualServer
         class Client
         {
             public readonly ushort routerID;
-            public readonly IPEndPoint endPoint;
-            public IPEndPoint publicEndPoint { get { if (exposeIPAddress) return endPoint; else return SharedPlatform.BlackHole; } }
+            public readonly PeerId endPoint;
+            public PeerId publicEndPoint { get { if (exposeIPAddress) return endPoint; else return peerManager.BlackHole; } }
             public readonly string name;
             public readonly bool exposeIPAddress;
-            public Client(IPEndPoint endPoint, ushort routerID, bool exposeIPAddress, string name="")
+            public Client(PeerId endPoint, ushort routerID, bool exposeIPAddress, string name="")
             {
                 RainMeadow.Debug($"New client: {routerID}, {name}");
                 this.routerID = routerID;
@@ -28,11 +28,11 @@ namespace RainMeadow.IndividualServer
 
                 if (peerManager is null) throw new InvalidProgrammerException("peerManager is null");
                 clients.Add(this);
-                peerManager.GetRemotePeer(endPoint, true); // create remotePeer
+                peerManager.EnsureRemotePeerCreated(endPoint); // create remotePeer
                 peerManager.OnPeerForgotten += OnPeerForgotten;  // TODO doesn't this accumulate?
             }
 
-            private void OnPeerForgotten(IPEndPoint forgottenEndPoint)
+            private void OnPeerForgotten(PeerId forgottenEndPoint)
             {
                 if (this.endPoint == forgottenEndPoint) RemoveClient();
             }
@@ -82,9 +82,9 @@ namespace RainMeadow.IndividualServer
             RouterCustomPacket.ProcessAction += RouterCustomPacket_ProcessAction;
         }
 
-        static bool CheckSender(IPEndPoint processingEndpoint, ushort fromRouterID)
+        static bool CheckSender(PeerId processingEndpoint, ushort fromRouterID)
         {
-            var actualSrcRouterID = clients.FirstOrDefault(x => UDPPeerManager.CompareIPEndpoints(processingEndpoint, x.endPoint)).routerID;
+            var actualSrcRouterID = clients.FirstOrDefault(x => processingEndpoint == x.endPoint).routerID;
             if (actualSrcRouterID == 0) {
                 RainMeadow.Error("Impersonation attempt! unknown sender disguised as " + fromRouterID.ToString());
                 return false;
@@ -106,7 +106,7 @@ namespace RainMeadow.IndividualServer
                 RainMeadow.Error("received packet for departed client " + packet.toRouterID.ToString());
                 return;
             }
-            destinationClient.Send(packet, UDPPeerManager.PacketType.Unreliable);
+            destinationClient.Send(packet, BasePeerManager.PacketType.Unreliable);
         }
 
         static void RouterCustomPacket_ProcessAction(RouterCustomPacket packet)
@@ -120,12 +120,12 @@ namespace RainMeadow.IndividualServer
                 RainMeadow.Error("received custom packet for departed client " + packet.toRouterID.ToString());
                 return;
             }
-            destinationClient.Send(packet, UDPPeerManager.PacketType.Unreliable);
+            destinationClient.Send(packet, BasePeerManager.PacketType.Unreliable);
         }
 
         static void EndRouterSession_ProcessAction(EndRouterSession packet)
         {
-            var self = clients.FirstOrDefault(x => UDPPeerManager.CompareIPEndpoints(x.endPoint, packet.processingEndpoint));
+            var self = clients.FirstOrDefault(x => x.endPoint == packet.processingEndpoint);
             if (self == null) {
                 RainMeadow.Error("Client that's not there wishes to leave...");
                 return;
@@ -186,7 +186,7 @@ namespace RainMeadow.IndividualServer
             var notifyPacket = new RouterModifyPlayerListPacket(
                 RouterModifyPlayerListPacket.Operation.Add,
                 new List<ushort> { id },
-                new List<IPEndPoint> { newClient.publicEndPoint },
+                new List<PeerId> { newClient.publicEndPoint },
                 new List<string> { packet.name }
             );
             foreach (Client client in clients)
@@ -194,7 +194,7 @@ namespace RainMeadow.IndividualServer
                 if (newClient == client)
                 {
                     // if somebody masks their IP, they don't get to learn any one else's
-                    var endPointList = clients.Select(x => SharedPlatform.BlackHole).ToList();
+                    var endPointList = clients.Select(x => peerManager.BlackHole).ToList();
                     if (client.exposeIPAddress) {
                         endPointList = clients.Select(x => x.publicEndPoint).ToList();
                     }

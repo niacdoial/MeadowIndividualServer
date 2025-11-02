@@ -12,7 +12,7 @@ namespace RainMeadow.IndividualServer
     {
         static void PublishRouterLobby_ProcessAction(PublishRouterLobby packet)
         {
-            var thisClient = clients.FirstOrDefault(x => UDPPeerManager.CompareIPEndpoints(x.endPoint, packet.processingEndpoint));
+            var thisClient = clients.FirstOrDefault(x => x.endPoint == packet.processingEndpoint);
             if (thisClient == null) {
                 RainMeadow.Debug("PublishLobby packet sent from an unauthorized party");
                 return;
@@ -38,7 +38,7 @@ namespace RainMeadow.IndividualServer
         {
             RainMeadow.Debug("Client list:");
             foreach (Client client in clients) {
-                RainMeadow.Debug(String.Format("  ID: {0}, endPoint: {1}, name: {2}", client.routerID, UDPPeerManager.describeEndPoint(client.endPoint), client.name));
+                RainMeadow.Debug(String.Format("  ID: {0}, endPoint: {1}, name: {2}", client.routerID, SharedPlatform.PlatformPeerManager.describePeerId(client.endPoint), client.name));
             }
         }
     }

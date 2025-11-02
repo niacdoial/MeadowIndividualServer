@@ -38,7 +38,7 @@ namespace RainMeadow.IndividualServer
         [CommandLineArgument]
         public static string bannedMods = "";
 
-        static UDPPeerManager? peerManager = null;
+        static BasePeerManager? peerManager = null;
         static void Main(string[] args)
         {
 
@@ -52,7 +52,8 @@ namespace RainMeadow.IndividualServer
                 CommandLineArgumentAttribute.InitializeCommandLine();
 
 
-                peerManager = new(port, 10000);
+                peerManager = new UDPPeerManager(port, 10000);
+                SharedPlatform.PlatformPeerManager = peerManager;
                 RainMeadow.Debug($"Hosting on port {peerManager.port}");
                 // peerManager.OnPeerForgotten += x =>
                 // {
@@ -84,7 +85,7 @@ namespace RainMeadow.IndividualServer
                         using (MemoryStream stream = new(data))
                         using (BinaryReader reader = new(stream))
                         {
-                            Packet.Decode(reader, (IPEndPoint)sender);
+                            Packet.Decode(reader, sender);
                         }
                     }
                     catch (Exception except)
