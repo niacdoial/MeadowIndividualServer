@@ -84,7 +84,7 @@ namespace RainMeadow.IndividualServer
 
         static bool CheckSender(PeerId processingEndpoint, ushort fromRouterID)
         {
-            var actualSrcRouterID = clients.FirstOrDefault(x => processingEndpoint == x.endPoint).routerID;
+            var actualSrcRouterID = clients.FirstOrDefault(x => x.endPoint.CompareAndUpdate(processingEndpoint)).routerID;
             if (actualSrcRouterID == 0) {
                 RainMeadow.Error("Impersonation attempt! unknown sender disguised as " + fromRouterID.ToString());
                 return false;
@@ -98,6 +98,7 @@ namespace RainMeadow.IndividualServer
         static void RouteSessionData_ProcessAction(RouteSessionData packet)
         {
             if (!CheckSender(packet.processingEndpoint, packet.fromRouterID)) { return; }
+
             if (packet.fromRouterID == packet.toRouterID) {
                 RainMeadow.Error("Client "+ packet.toRouterID.ToString() + " send a packet to themself");
             }
@@ -112,6 +113,7 @@ namespace RainMeadow.IndividualServer
         static void RouterCustomPacket_ProcessAction(RouterCustomPacket packet)
         {
             if (!CheckSender(packet.processingEndpoint, packet.fromRouterID)) { return; }
+
             if (packet.fromRouterID == packet.toRouterID) {
                 RainMeadow.Error("Client "+ packet.toRouterID.ToString() + " send a custom packet to themself");
             }
@@ -125,7 +127,7 @@ namespace RainMeadow.IndividualServer
 
         static void EndRouterSession_ProcessAction(EndRouterSession packet)
         {
-            var self = clients.FirstOrDefault(x => x.endPoint == packet.processingEndpoint);
+            var self = clients.FirstOrDefault(x => x.endPoint.CompareAndUpdate(packet.processingEndpoint));
             if (self == null) {
                 RainMeadow.Error("Client that's not there wishes to leave...");
                 return;

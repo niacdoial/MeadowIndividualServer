@@ -5,6 +5,8 @@ using System.Diagnostics;
 using System.IO;
 using System.Net;
 using RainMeadow.Shared;
+using Sodium;
+
 namespace RainMeadow.IndividualServer
 {
     static partial class IndividualServer
@@ -52,9 +54,14 @@ namespace RainMeadow.IndividualServer
                 CommandLineArgumentAttribute.InitializeCommandLine();
 
 
-                peerManager = new UDPPeerManager(port, 10000);
+                peerManager = new SecuredPeerManager(port, 10000);
                 SharedPlatform.PlatformPeerManager = peerManager;
-                RainMeadow.Debug($"Hosting on port {peerManager.port}");
+                if (peerManager is SecuredPeerManager sPMan) {
+                    RainMeadow.Debug($"Direct connect address is {sPMan.GetGenericInviteCode()} where the IP has to be completed");
+                } else {
+                    RainMeadow.Debug($"Direct connect address is X.X.X.X:{peerManager.port} where the IP has to be completed");
+                }
+
                 // peerManager.OnPeerForgotten += x =>
                 // {
                 //     RainMeadow.Debug($"{x} was forgotten");
@@ -77,7 +84,7 @@ namespace RainMeadow.IndividualServer
             {
 
                 peerManager.Update();
-                if (peerManager.IsPacketAvailable() && peerManager.Recieve(out var sender) is byte[] data)
+                if (peerManager.IsPacketAvailable() && peerManager.Receive(out var sender) is byte[] data)
                 {
                     try
                     {

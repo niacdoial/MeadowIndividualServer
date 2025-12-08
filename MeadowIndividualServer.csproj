@@ -17,6 +17,12 @@
   </ItemGroup>
 
   <ItemGroup>
+  <Reference Include="libsodium.dll">
+    <HintPath>lib\libsodium.dll</HintPath>
+  </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
     <None Remove=".gitattributes" />
     <None Remove=".gitignore" />
   </ItemGroup>
