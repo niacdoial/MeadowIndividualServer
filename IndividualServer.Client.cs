@@ -10,8 +10,8 @@ namespace RainMeadow.IndividualServer
 {
     static partial class IndividualServer
     {
-        static List<Client> clients = new();
-        class Client
+        static public List<Client> clients = new();
+        public class Client
         {
             public readonly ushort routerID;
             public readonly IPEndPoint endPoint;

@@ -38,7 +38,13 @@ namespace RainMeadow.IndividualServer
         [CommandLineArgument]
         public static string bannedMods = "";
 
-        static UDPPeerManager? peerManager = null;
+        [CommandLineArgument]
+        public static bool gameLift = false;
+
+
+        public static bool ready = false;
+        public static UDPPeerManager? peerManager = null;
+        public static GameLiftManager? gameLiftManager = null;
         static void Main(string[] args)
         {
 
@@ -66,15 +72,31 @@ namespace RainMeadow.IndividualServer
                 RainMeadow.Error(except);
                 throw;
             }
+            
+            if (gameLift)
+            {
+                gameLiftManager = new GameLiftManager();
+                gameLiftManager.ProcessSetup();
+            }
+            else 
+            {
+                ready = true;
+            }
 
-            RainMeadow.Debug(Stopwatch.Frequency);
 
-            // Todo: Alert matchmaking server that we've successfully started listening on a new port
 
             // Main Lobby
+            UpdateLoop();
+        }
+
+        
+
+        static void UpdateLoop()
+        {
             while (true)
             {
-
+                if (!ready) continue;
+                if (peerManager is null) throw new Exception("peerManager is null");
                 peerManager.Update();
                 if (peerManager.IsPacketAvailable() && peerManager.Recieve(out var sender) is byte[] data)
                 {
@@ -93,9 +115,7 @@ namespace RainMeadow.IndividualServer
                         RainMeadow.Stacktrace();
                     }
                 }
-
             }
-
         }
     }
 }
