@@ -84,7 +84,7 @@ namespace RainMeadow.IndividualServer
             {
 
                 peerManager.Update();
-                if (peerManager.IsPacketAvailable() && peerManager.Receive(out var sender) is byte[] data)
+                if (peerManager.Receive(out var sender, true) is byte[] data)
                 {
                     try
                     {
