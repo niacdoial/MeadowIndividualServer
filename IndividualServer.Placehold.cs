@@ -40,6 +40,10 @@ namespace RainMeadow.IndividualServer
             foreach (Client client in clients) {
                 RainMeadow.Debug(String.Format("  ID: {0}, endPoint: {1}, name: {2}", client.routerID, SharedPlatform.PlatformPeerManager.describePeerId(client.endPoint), client.name));
             }
+            RainMeadow.Debug("Prospective client list:");
+            foreach (Client client in prospectiveClients) {
+                RainMeadow.Debug(String.Format("  ID: {0}, endPoint: {1}, name: {2}", client.routerID, SharedPlatform.PlatformPeerManager.describePeerId(client.endPoint), client.name));
+            }
         }
     }
 }
