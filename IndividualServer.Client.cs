@@ -338,7 +338,8 @@ namespace RainMeadow.IndividualServer
             var senderClient = clients.FirstOrDefault(x => x.routerID == packet.fromRouterID);
             foreach (Client client in clients)
             {
-                if ((senderClient.exposeIPAddress && client.exposeIPAddress) || client.routerID == packet.fromRouterID) { continue; }
+                //if ((senderClient.exposeIPAddress && client.exposeIPAddress) || client.routerID == packet.fromRouterID) { continue; }
+                if (client.routerID == packet.fromRouterID) { continue; }
                 client.Send(packet, BasePeerManager.PacketType.Reliable);
             }
         }
