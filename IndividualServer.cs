@@ -40,7 +40,7 @@ namespace RainMeadow.IndividualServer
         [CommandLineArgument]
         public static string bannedMods = "";
 
-        static BasePeerManager? peerManager = null;
+        static SecuredPeerManager? peerManager = null;
         static void Main(string[] args)
         {
 
@@ -55,6 +55,7 @@ namespace RainMeadow.IndividualServer
 
 
                 peerManager = new SecuredPeerManager(port, 10000);
+                peerManager.allowPeerCreationWithoutKey = false;  // status-unknown peers are only allowed for LAN
                 SharedPlatform.PlatformPeerManager = peerManager;
                 if (peerManager is SecuredPeerManager sPMan) {
                     RainMeadow.Debug($"Direct connect address is {sPMan.GetGenericInviteCode()} where the IP has to be completed");
