@@ -51,7 +51,7 @@ namespace RainMeadow.IndividualServer
                     var removalPacket = new RouterModifyPlayerListPacket(RouterModifyPlayerListPacket.Operation.Remove, new List<ushort> { routerID });
                     foreach (Client client in clients)
                     {
-                        client.Send(removalPacket, BasePeerManager.PacketType.Reliable);
+                        client.Send(removalPacket, PeerManager.PacketType.Reliable);
                     }
                     peerManager.ForgetPeer(endPoint);
                     PrintRemainingClients();
@@ -62,13 +62,13 @@ namespace RainMeadow.IndividualServer
                     prospectiveClients.Remove(this);
 
                     var removalPacket = new RouterModifyPlayerListPacket(RouterModifyPlayerListPacket.Operation.Remove, new List<ushort> { routerID });
-                    clients[0].Send(removalPacket, BasePeerManager.PacketType.Reliable);
+                    clients[0].Send(removalPacket, PeerManager.PacketType.Reliable);
                     peerManager.ForgetPeer(endPoint);
                     PrintRemainingClients();
                 }
             }
 
-            public void Send(Packet packet, BasePeerManager.PacketType type, bool start_conversation = false)
+            public void Send(Packet packet, PeerManager.PacketType type, bool start_conversation = false)
             {
                 if (peerManager is null) throw new InvalidProgrammerException("peerManager is null");
                 using (MemoryStream stream = new())
@@ -127,7 +127,7 @@ namespace RainMeadow.IndividualServer
                 RainMeadow.Error("received packet for departed client " + packet.toRouterID.ToString());
                 return;
             }
-            destinationClient.Send(packet, BasePeerManager.PacketType.Unreliable);
+            destinationClient.Send(packet, PeerManager.PacketType.Unreliable);
         }
 
         static void RouterCustomPacket_ProcessAction(RouterCustomPacket packet)
@@ -142,7 +142,7 @@ namespace RainMeadow.IndividualServer
                 RainMeadow.Error("received custom packet for departed client " + packet.toRouterID.ToString());
                 return;
             }
-            destinationClient.Send(packet, BasePeerManager.PacketType.Unreliable);
+            destinationClient.Send(packet, PeerManager.PacketType.Unreliable);
         }
 
         static void EndRouterSession_ProcessAction(EndRouterSession packet)
@@ -167,14 +167,14 @@ namespace RainMeadow.IndividualServer
                 RainMeadow.Debug("first player! let them be host");
                 hostClient = new Client(packet.processingEndpoint, 1, packet.exposeIPAddress, packet.name);
                 clients.Add(hostClient);
-                hostClient.Send(new LobbyIsEmpty(), BasePeerManager.PacketType.Reliable);
+                hostClient.Send(new LobbyIsEmpty(), PeerManager.PacketType.Reliable);
                 hostClient.Send(new RouterModifyPlayerListPacket(
                     RouterModifyPlayerListPacket.Operation.Add,
                     clients.Select(x => x.routerID).ToList(),
                     clients.Select(x => x.publicEndPoint).ToList(),
                     clients.Select(x => x.name).ToList()
                     ),
-                    BasePeerManager.PacketType.Reliable
+                    PeerManager.PacketType.Reliable
                 );
                 return;
             }
@@ -220,7 +220,7 @@ namespace RainMeadow.IndividualServer
                     new List<PeerId> { peerManager.BlackHole },
                     new List<string> { packet.name }
                 ),
-                BasePeerManager.PacketType.Reliable
+                PeerManager.PacketType.Reliable
             );
 
             newClient.Send(
@@ -230,9 +230,9 @@ namespace RainMeadow.IndividualServer
                     new List<PeerId> { peerManager.BlackHole, peerManager.BlackHole },
                     new List<string> { "HOST", packet.name }
                 ),
-                BasePeerManager.PacketType.Reliable
+                PeerManager.PacketType.Reliable
             );
-            newClient.Send(new JoinRouterLobby(id, maxplayers, name, passwordprotected, mode, mods, bannedMods), UDPPeerManager.PacketType.Reliable);
+            newClient.Send(new JoinRouterLobby(id, maxplayers, name, passwordprotected, mode, mods, bannedMods), PeerManager.PacketType.Reliable);
             PrintRemainingClients();
         }
 
@@ -250,7 +250,7 @@ namespace RainMeadow.IndividualServer
                         RouterModifyPlayerListPacket.Operation.Remove,
                         new List<ushort> { hostClient.routerID, newClient.routerID }
                     ),
-                    BasePeerManager.PacketType.Reliable
+                    PeerManager.PacketType.Reliable
                 );
                 newClient.RemoveClient();  // TODO: delay;
                 return;
@@ -266,7 +266,7 @@ namespace RainMeadow.IndividualServer
                 if (newClient.exposeIPAddress) {
                     pkt.endPoints[0] = hostClient.publicEndPoint;
                 }
-                newClient.Send(pkt, BasePeerManager.PacketType.Reliable);
+                newClient.Send(pkt, PeerManager.PacketType.Reliable);
 
                 pkt = new RouterModifyPlayerListPacket(
                     RouterModifyPlayerListPacket.Operation.Update,
@@ -278,7 +278,7 @@ namespace RainMeadow.IndividualServer
                 if (hostClient.exposeIPAddress) {
                     pkt.endPoints[0] = newClient.publicEndPoint;
                 }
-                hostClient.Send(pkt, BasePeerManager.PacketType.Reliable);
+                hostClient.Send(pkt, PeerManager.PacketType.Reliable);
 
                 prospectiveClients.Remove(newClient);
                 clients.Add(newClient);
@@ -318,14 +318,14 @@ namespace RainMeadow.IndividualServer
                         endPointList,
                         clients.Select(x => x.name).ToList()
                         ),
-                        BasePeerManager.PacketType.Reliable);
+                        PeerManager.PacketType.Reliable);
                 }
                 else
                 {
                     if (client.exposeIPAddress)
-                        client.Send(notifyPacketForUnproxied, BasePeerManager.PacketType.Reliable);
+                        client.Send(notifyPacketForUnproxied, PeerManager.PacketType.Reliable);
                     else
-                        client.Send(notifyPacketForProxied, BasePeerManager.PacketType.Reliable);
+                        client.Send(notifyPacketForProxied, PeerManager.PacketType.Reliable);
                 }
             }
 
@@ -340,7 +340,7 @@ namespace RainMeadow.IndividualServer
             {
                 //if ((senderClient.exposeIPAddress && client.exposeIPAddress) || client.routerID == packet.fromRouterID) { continue; }
                 if (client.routerID == packet.fromRouterID) { continue; }
-                client.Send(packet, BasePeerManager.PacketType.Reliable);
+                client.Send(packet, PeerManager.PacketType.Reliable);
             }
         }
     }
