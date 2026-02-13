@@ -40,7 +40,7 @@ namespace RainMeadow.IndividualServer
         [CommandLineArgument]
         public static string bannedMods = "";
 
-        static BasePeerManager? peerManager = null;
+        static SecuredPeerManager? peerManager = null;
         static void Main(string[] args)
         {
 
@@ -55,18 +55,7 @@ namespace RainMeadow.IndividualServer
 
 
                 peerManager = new SecuredPeerManager(port, 10000);
-                SharedPlatform.PlatformPeerManager = peerManager;
-                if (peerManager is SecuredPeerManager sPMan) {
-                    RainMeadow.Debug($"Direct connect address is {sPMan.GetGenericInviteCode()} where the IP has to be completed");
-                } else {
-                    RainMeadow.Debug($"Direct connect address is X.X.X.X:{peerManager.port} where the IP has to be completed");
-                }
-
-                // peerManager.OnPeerForgotten += x =>
-                // {
-                //     RainMeadow.Debug($"{x} was forgotten");
-                // };
-
+                RainMeadow.Debug($"Direct connect address is {peerManager.Me.ToString(false)}");
                 SetupClientEvents();
             }
             catch (Exception except)
@@ -75,8 +64,6 @@ namespace RainMeadow.IndividualServer
                 throw;
             }
 
-            RainMeadow.Debug(Stopwatch.Frequency);
-
             // Todo: Alert matchmaking server that we've successfully started listening on a new port
 
             // Main Lobby
@@ -84,7 +71,7 @@ namespace RainMeadow.IndividualServer
             {
 
                 peerManager.Update();
-                if (peerManager.Receive(out var sender, true) is byte[] data)
+                if (peerManager.Receive(out SecuredPeerId? sender, out bool boxed, false) is byte[] data)
                 {
                     try
                     {
@@ -92,7 +79,7 @@ namespace RainMeadow.IndividualServer
                         using (MemoryStream stream = new(data))
                         using (BinaryReader reader = new(stream))
                         {
-                            Packet.Decode(reader, sender);
+                            Packet.Decode(reader, sender, peerManager.Me, boxed);
                         }
                     }
                     catch (Exception except)
