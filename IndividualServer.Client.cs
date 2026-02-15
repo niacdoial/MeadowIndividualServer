@@ -86,6 +86,7 @@ namespace RainMeadow.IndividualServer
 
             public void FulfillProspective()
             {
+                RainMeadow.Debug(PeerID.ToString(false));
                 if (!prospective) return;
                 prospective = false;
                 if (!Proxied)
@@ -94,7 +95,7 @@ namespace RainMeadow.IndividualServer
                         RouterModifyPlayerListPacket.Operation.Update,
                         [ RouterID ],
                         [ PeerID ],
-                        [ name ]
+                        [ Name ]
                     );
 
                     var mutualUnproxiedClients =  clients.Where(x => !x.Proxied && x != this).ToArray();
@@ -105,7 +106,7 @@ namespace RainMeadow.IndividualServer
                     Send(new RouterModifyPlayerListPacket(
                         RouterModifyPlayerListPacket.Operation.Update,
                         mutualUnproxiedClients.Select(x => x.RouterID).ToList(),
-                        mutualUnproxiedClients.Select(x => x.PeerID).ToList(),
+                        mutualUnproxiedClients.Select(x => (SecuredPeerId?)x.PeerID).ToList(),
                         mutualUnproxiedClients.Select(x => x.Name).ToList()
                     ), true);
                 }
