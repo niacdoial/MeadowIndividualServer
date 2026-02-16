@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net48</TargetFramework>
+    <TargetFramework>net8.0</TargetFramework>
     <Version>2.0.8</Version>
 		<LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
@@ -13,7 +13,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Reference Include="lib\*.dll" Private="False" />
+    <Reference Include="lib\*.dll" Private="True" />
   </ItemGroup>
 
   <ItemGroup>
@@ -27,4 +27,10 @@
     <None Remove=".gitignore" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="log4net" Version="3.2.0" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
+    <PackageReference Include="Polly" Version="8.6.5" />
+    <PackageReference Include="websocketsharp.core" Version="1.0.1" />
+  </ItemGroup>
 </Project>

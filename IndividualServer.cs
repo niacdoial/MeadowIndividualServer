@@ -5,44 +5,23 @@ using System.Diagnostics;
 using System.IO;
 using System.Net;
 using RainMeadow.Shared;
+using RainMeadow.Shared.Models;
 using Sodium;
 
 namespace RainMeadow.IndividualServer
 {
+    
     static partial class IndividualServer
     {
-        // networking
-        [CommandLineArgument]
-        public static ushort port = 8720;
+        public static string Name = "Router Lobby";
+        public static GameLiftManager? gameLift;
+        public static bool ready = false;
+        public static SecuredPeerManager? peerManager = null;
+        public static LobbyParameters? lobbyParameters;
 
-        [CommandLineArgument]
-        public static ulong heartbeatTime = 50;
-
-        [CommandLineArgument]
-        public static ulong timeoutTime = 3000;
-
-        // lobby info
-        [CommandLineArgument]
-        public static int maxplayers = 4;
-
-        [CommandLineArgument]
-        public static bool passwordprotected = false;
-
-        [CommandLineArgument]
-        public static string name = "Router Lobby";
-
-        [CommandLineArgument]
-        public static string mode = "Meadow";
-
-        [CommandLineArgument]
-        public static string mods = "";
-
-        [CommandLineArgument]
-        public static string bannedMods = "";
-
-        static SecuredPeerManager? peerManager = null;
         static void Main(string[] args)
         {
+            
 
             SharedCodeLogger.DebugInner += RainMeadow.Debug;
             SharedCodeLogger.DebugMeInner += RainMeadow.DebugMe;
@@ -52,9 +31,7 @@ namespace RainMeadow.IndividualServer
             try
             {
                 CommandLineArgumentAttribute.InitializeCommandLine();
-
-
-                peerManager = new SecuredPeerManager(port, 10000);
+                peerManager = new SecuredPeerManager(CommandLineArguments.port, 10000);
                 RainMeadow.Debug($"Direct connect address is {peerManager.Me.ToString(false)}");
                 SetupClientEvents();
             }
@@ -64,12 +41,35 @@ namespace RainMeadow.IndividualServer
                 throw;
             }
 
-            // Todo: Alert matchmaking server that we've successfully started listening on a new port
+            RainMeadow.Debug(Stopwatch.Frequency);
+
+            if (CommandLineArguments.gameLift)
+            {
+                gameLift = new GameLiftManager();
+                gameLift.ProcessSetup();
+            }
+            else
+            {
+                lobbyParameters = new LobbyParameters() { 
+                    MaxPlayers = CommandLineArguments.maxplayers, 
+                    PasswordProtected = CommandLineArguments.passwordprotected,
+                    Mode = CommandLineArguments.mode,
+                    BannedMods = CommandLineArguments.bannedMods, 
+                    Mods = CommandLineArguments.mods};
+            }
 
             // Main Lobby
+            UpdateLoop();
+        }
+
+        
+
+        static void UpdateLoop()
+        {
             while (true)
             {
-
+                if (!ready) continue;
+                if (peerManager is null) throw new Exception("peerManager is null");
                 peerManager.Update();
                 if (peerManager.Receive(out SecuredPeerId? sender, out bool boxed, false) is byte[] data)
                 {
@@ -88,9 +88,7 @@ namespace RainMeadow.IndividualServer
                         RainMeadow.Stacktrace();
                     }
                 }
-
             }
-
         }
     }
 }
