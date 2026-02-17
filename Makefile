@@ -1,9 +1,9 @@
 
 
 build:
-	dotnet publish --self-contained --runtime linux-x64 -o bin -c Release
+	dotnet publish --self-contained --runtime linux-arm64 -o bin -c Release
 
-container: publish
+container: build
 	docker build . -t meadow-individual-server
 
 .PHONY: build, container
