@@ -56,6 +56,7 @@ namespace RainMeadow.IndividualServer
                     Mode = CommandLineArguments.mode,
                     BannedMods = CommandLineArguments.bannedMods, 
                     Mods = CommandLineArguments.mods};
+                ready = true;
             }
 
             // Main Lobby

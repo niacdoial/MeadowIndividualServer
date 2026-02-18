@@ -37,7 +37,7 @@ namespace RainMeadow.IndividualServer
             }).ToArray();
 
 
-            var fields = typeof(IndividualServer).GetFields().Where(x => x.IsDefined(typeof(CommandLineArgumentAttribute), true)).ToDictionary(
+            var fields = typeof(CommandLineArguments).GetFields().Where(x => x.IsDefined(typeof(CommandLineArgumentAttribute), true)).ToDictionary(
                 x => x,
                 x => (CommandLineArgumentAttribute)x.GetCustomAttributes(typeof(CommandLineArgumentAttribute), false).First()
             );
@@ -60,7 +60,7 @@ namespace RainMeadow.IndividualServer
                     }
                     else throw new FormatException($"No parsing function for type {selected.Key.FieldType.Name}");
 
-                    RainMeadow.Debug($"set IndividualServer.{selected.Key.Name} to {arguments[i]}");
+                    RainMeadow.Debug($"set {nameof(CommandLineArguments)}.{selected.Key.Name} to {arguments[i]}");
                 }
                 catch (Exception except)
                 {

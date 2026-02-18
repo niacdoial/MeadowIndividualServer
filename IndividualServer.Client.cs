@@ -292,7 +292,7 @@ namespace RainMeadow.IndividualServer
 
      
             
-            newClient.Send(new JoinRouterLobby(id, lobbyParameters!), true);
+            newClient.Send(new JoinRouterLobby(id, Name, lobbyParameters!), true);
             PrintRemainingClients();
         }
 
