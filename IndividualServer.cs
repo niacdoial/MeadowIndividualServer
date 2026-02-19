@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Net;
 using RainMeadow.Shared;
+using RainMeadow.Shared.Models;
 using Sodium;
 
 namespace RainMeadow.IndividualServer
@@ -22,6 +23,8 @@ namespace RainMeadow.IndividualServer
         public static ulong timeoutTime = 3000;
 
         // lobby info
+        public static LobbyParameters lobbyParams = new();
+
         [CommandLineArgument]
         public static int maxplayers = 4;
 
@@ -40,7 +43,7 @@ namespace RainMeadow.IndividualServer
         [CommandLineArgument]
         public static string bannedMods = "";
 
-        static PeerManager? peerManager = null;
+        static SecuredPeerManager? peerManager = null;
         static void Main(string[] args)
         {
 
@@ -52,13 +55,18 @@ namespace RainMeadow.IndividualServer
             try
             {
                 CommandLineArgumentAttribute.InitializeCommandLine();
+                lobbyParams.MaxPlayers = maxplayers;
+                lobbyParams.PasswordProtected = passwordprotected;
+                lobbyParams.Mode = mode;
+                lobbyParams.Mods = mods;
+                lobbyParams.BannedMods = bannedMods;
 
 
-                peerManager = new PeerManager(port, 10000);
-                peerManager.allowPeerCreationWithoutKey = false;  // status-unknown peers are only allowed for LAN
-                SharedPlatform.PlatformPeerManager = peerManager;
-                if (peerManager is PeerManager sPMan) {
-                    RainMeadow.Debug($"Direct connect address is {sPMan.GetGenericInviteCode()} where the IP has to be completed");
+                peerManager = new SecuredPeerManager(port, 10000);
+                // TODO: redo this
+                //peerManager.allowPeerCreationWithoutKey = false;  // status-unknown peers are only allowed for LAN
+                if (peerManager is SecuredPeerManager sPMan) {
+                    RainMeadow.Debug($"Direct connect address is {sPMan.ToString()} (note the IP may need to be edited)");
                 } else {
                     RainMeadow.Debug($"Direct connect address is X.X.X.X:{peerManager.port} where the IP has to be completed");
                 }
@@ -85,7 +93,7 @@ namespace RainMeadow.IndividualServer
             {
 
                 peerManager.Update();
-                if (peerManager.Receive(out var sender, true) is byte[] data)
+                if (peerManager.Receive(out var sender, out var boxed, true) is byte[] data)
                 {
                     try
                     {
@@ -93,7 +101,7 @@ namespace RainMeadow.IndividualServer
                         using (MemoryStream stream = new(data))
                         using (BinaryReader reader = new(stream))
                         {
-                            Packet.Decode(reader, sender);
+                            Packet.Decode(reader, sender, peerManager.Me, boxed);
                         }
                     }
                     catch (Exception except)
