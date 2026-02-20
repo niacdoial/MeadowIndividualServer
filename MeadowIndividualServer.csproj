@@ -8,7 +8,6 @@
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
-    <InvariantGlobalization>true</InvariantGlobalization>
     <Configurations>Debug;Release</Configurations>
     <RootNamespace>RainMeadow</RootNamespace>
   </PropertyGroup>

@@ -42,7 +42,6 @@ namespace RainMeadow.IndividualServer
             }
 
             RainMeadow.Debug(Stopwatch.Frequency);
-
             if (CommandLineArguments.gameLift)
             {
                 gameLift = new GameLiftManager();

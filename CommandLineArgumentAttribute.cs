@@ -37,7 +37,7 @@ namespace RainMeadow.IndividualServer
             }).ToArray();
 
 
-            var fields = typeof(CommandLineArguments).GetFields().Where(x => x.IsDefined(typeof(CommandLineArgumentAttribute), true)).ToDictionary(
+            var fields = typeof(CommandLineArguments).GetFields(BindingFlags.Instance | BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public).Where(x => x.IsDefined(typeof(CommandLineArgumentAttribute), true)).ToDictionary(
                 x => x,
                 x => (CommandLineArgumentAttribute)x.GetCustomAttributes(typeof(CommandLineArgumentAttribute), false).First()
             );
