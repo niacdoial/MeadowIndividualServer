@@ -20,14 +20,14 @@ namespace RainMeadow.IndividualServer
                 return;
             }
 
-            clients.Add(new Client(packet.processingPeer, 1, packet.exposeIPAddress, packet.name));
+            clients.Add(new Client(packet.processingPeer, 1, packet.exposeIPAddress, packet.userName));
 
             // TODO: protection against double-sending? or do we trust the host not to jank this up?
             RainMeadow.Debug("Received new lobby");
             if (packet.lobbyParameters.MaxPlayers <= 0) {
                 RainMeadow.Error("published lobby: bad maxplayers");
             }
-            name = packet.name;
+            name = packet.lobbyName;
             lobbyParams = packet.lobbyParameters;
         }
 

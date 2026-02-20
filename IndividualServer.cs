@@ -66,7 +66,7 @@ namespace RainMeadow.IndividualServer
                 // TODO: redo this
                 //peerManager.allowPeerCreationWithoutKey = false;  // status-unknown peers are only allowed for LAN
                 if (peerManager is SecuredPeerManager sPMan) {
-                    RainMeadow.Debug($"Direct connect address is {sPMan.ToString()} (note the IP may need to be edited)");
+                    RainMeadow.Debug($"Direct connect address is {sPMan.Me.ToString()} (note the IP may need to be edited)");
                 } else {
                     RainMeadow.Debug($"Direct connect address is X.X.X.X:{peerManager.port} where the IP has to be completed");
                 }
