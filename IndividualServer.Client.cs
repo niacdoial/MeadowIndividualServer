@@ -74,7 +74,7 @@ namespace RainMeadow.IndividualServer
                     RainMeadow.Debug($"Removing prospective client: {routerID}");
                     prospectiveClients.Remove(this);
 
-                    var removalPacket = new RouterModifyPlayerListPacket(RouterModifyPlayerListPacket.Operation.Remove, new List<ushort> { routerID });
+                    var removalPacket = new RouterModifyPlayerListPacket(RouterModifyPlayerListPacket.Operation.Remove, new List<ushort> { routerID }) {boxed=true};
                     clients[0].Send(removalPacket, PacketReliability.Reliable);
                     peerManager.ForgetPeer(endPoint);
                     PrintRemainingClients();
@@ -213,7 +213,7 @@ namespace RainMeadow.IndividualServer
                     new List<ushort> { id },
                     new List<SecuredPeerId> { null },
                     new List<PlayerInfo> { new PlayerInfo(){username=packet.name,} }
-                ),
+                ) {boxed=true},
                 PacketReliability.Reliable
             );
 
@@ -223,10 +223,10 @@ namespace RainMeadow.IndividualServer
                     new List<ushort> { hostClient.routerID, id },
                     new List<SecuredPeerId> { null, null },
                     new List<PlayerInfo> { new PlayerInfo(){username="HOST",}, new PlayerInfo(){username=packet.name,} }
-                ),
+                ) {boxed=true},
                 PacketReliability.Reliable
             );
-            newClient.Send(new JoinRouterLobby(id, IndividualServer.name, IndividualServer.lobbyParams), PacketReliability.Reliable);
+            newClient.Send(new JoinRouterLobby(id, IndividualServer.name, IndividualServer.lobbyParams) {boxed=true}, PacketReliability.Reliable);
             PrintRemainingClients();
         }
 
@@ -243,7 +243,7 @@ namespace RainMeadow.IndividualServer
                     new RouterModifyPlayerListPacket(
                         RouterModifyPlayerListPacket.Operation.Remove,
                         new List<ushort> { hostClient.routerID, newClient.routerID }
-                    ),
+                    ) {boxed=true},
                     PacketReliability.Reliable
                 );
                 newClient.RemoveClient();  // TODO: delay;
@@ -256,7 +256,7 @@ namespace RainMeadow.IndividualServer
                     new List<ushort> { hostClient.routerID, newClient.routerID },
                     new List<SecuredPeerId> { null, null },
                     new List<PlayerInfo> { hostClient.info, newClient.info }
-                );
+                ) {boxed=true};
                 if (newClient.exposeIPAddress) {
                     pkt.endPoints[0] = hostClient.publicEndPoint;
                 }
@@ -267,7 +267,7 @@ namespace RainMeadow.IndividualServer
                     new List<ushort> { newClient.routerID },
                     new List<SecuredPeerId> { null },
                     new List<PlayerInfo> { newClient.info }
-                );
+                ) {boxed=true};
 
                 if (hostClient.exposeIPAddress) {
                     pkt.endPoints[0] = newClient.publicEndPoint;
@@ -285,13 +285,13 @@ namespace RainMeadow.IndividualServer
                 new List<ushort> { newClient.routerID },
                 new List<SecuredPeerId> { newClient.publicEndPoint },
                 new List<PlayerInfo> { newClient.info }
-            );
+            ) {boxed=true};
             var notifyPacketForProxied = new RouterModifyPlayerListPacket(
                 RouterModifyPlayerListPacket.Operation.Add,
                 new List<ushort> { newClient.routerID },
                 new List<SecuredPeerId> { null },
                 new List<PlayerInfo> { newClient.info }
-            );
+            ) {boxed=true};
 
             foreach (Client client in clients)
             {
@@ -311,7 +311,7 @@ namespace RainMeadow.IndividualServer
                         clients.Select(x => x.routerID).ToList(),
                         endPointList,
                         clients.Select(x => x.info).ToList()
-                        ),
+                        ) {boxed=true},
                         PacketReliability.Reliable);
                 }
                 else
