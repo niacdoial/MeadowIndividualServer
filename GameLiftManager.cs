@@ -19,6 +19,7 @@ namespace RainMeadow.IndividualServer
             GenericOutcome err = GameLiftServerAPI.InitSDK(new ServerParameters());
             RainMeadow.Debug(GameLiftServerAPI.GetSdkVersion().Result);
             if (!err.Success) throw new Exception("AWS GameLift: " + err.Error.ErrorMessage);
+            IndividualServer.readyLock.Reset();
             err = GameLiftServerAPI.ProcessReady(new ProcessParameters(
                 OnStartGameSession, 
                 OnUpdateGameSession, 
@@ -26,8 +27,7 @@ namespace RainMeadow.IndividualServer
                 OnHealthCheck, 
                 IndividualServer.peerManager?.port ?? throw new Exception("null peerManager"), new LogParameters()));
             if (!err.Success) throw new Exception("AWS GameLift: " + err.Error.ErrorMessage);
-
-            IndividualServer.ready = false;
+            IndividualServer.OnExit += () => GameLiftServerAPI.ProcessEnding();
         }
 
         public bool AcceptPlayerSession(string session)
@@ -47,15 +47,16 @@ namespace RainMeadow.IndividualServer
 
         private void OnStartGameSession(GameSession gameSession)
         {
+            IndividualServer.peerManager!.AcceptNewConnections = true;
             IndividualServer.lobbyParameters = new LobbyParameters(gameSession.GameProperties); 
             IndividualServer.lobbyParameters.MaxPlayers = gameSession.MaximumPlayerSessionCount;
-            IndividualServer.ready = true;
             GenericOutcome err = GameLiftServerAPI.ActivateGameSession();
             if (!err.Success)
             {
                 throw new Exception("AWS GameLift: " + err.Error.ErrorMessage);
             }
             gameSessionID = gameSession.GameSessionId;
+            IndividualServer.readyLock.Set();
         }
 
         public PlayerInfo GetPlayerSession(string playerSessionID)
@@ -72,7 +73,23 @@ namespace RainMeadow.IndividualServer
 
         public void OnProcessTerminate()
         {
-            IndividualServer.ready = false;
+            AwsDateTimeOutcome outcome = GameLiftServerAPI.GetTerminationTime();
+            if (outcome.Success)
+            {
+                TimeSpan time = DateTime.Now - outcome.Result;
+                Task.Run(async () =>
+                {
+                    await Task.Delay(time.Subtract(TimeSpan.FromSeconds(10)));
+                    if (IndividualServer.peerManager is not null)
+                    {
+                        lock (IndividualServer.peerManager)
+                        {
+                            IndividualServer.ShutDown();
+                        }
+                    }
+                });
+                
+            }
         }
 
         public bool OnHealthCheck()

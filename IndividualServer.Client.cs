@@ -50,12 +50,13 @@ namespace RainMeadow.IndividualServer
             }
 
 
-            private void OnPeerForgotten(SecuredPeerManager.RemotePeer forgottenPeer)
+            private void OnPeerForgotten(SecuredPeerManager.RemotePeer forgottenPeer, string reason)
             {
                 if (this.Peer == forgottenPeer) RemoveClient();
+                RainMeadow.Debug($"Forgot {this}, Reason: {reason}");
             }
 
-            public void RemoveClient()
+            public void RemoveClient(string reason = "")
             {
                 if (gameLift != null)
                 {
@@ -72,7 +73,7 @@ namespace RainMeadow.IndividualServer
 
                     var removalPacket = new RouterModifyPlayerListPacket(RouterModifyPlayerListPacket.Operation.Remove, new List<ushort> { RouterID });
                     foreach (Client client in clients) client.Send(removalPacket, true);
-                    peerManager.ForgetPeer(Peer);
+                    peerManager.TerminatePeer(Peer, reason);
                     PrintRemainingClients();
                 }
             }
@@ -257,8 +258,7 @@ namespace RainMeadow.IndividualServer
             if (peerManager is null) throw new InvalidProgrammerException("peerManager is null");
             if (id == nullRouterID)
             {
-                peerManager.ForgetPeer(packet.processingPeer);
-                RainMeadow.Error("No available RouterIDs");
+                peerManager.TerminatePeer(packet.processingPeer, "No more available router ids");
                 return;
             }
 
