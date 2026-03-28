@@ -1,99 +1,134 @@
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Runtime.InteropServices;
+using System.Text;
+using System.Threading.Tasks;
+using Aws.GameLift.Server;
 using RainMeadow.Shared;
 using RainMeadow.Shared.Models;
-using Sodium;
 
 namespace RainMeadow.IndividualServer
 {
     static partial class IndividualServer
     {
-        static List<Client> clients = new();
-        static List<Client> prospectiveClients = new();
-
-        public enum PacketReliability
+        static public List<Client> clients = new();
+        public class Client
         {
-            Unreliable = 0,
-            Reliable
-        }
+            public readonly ushort RouterID;
+            public readonly PlayerInfo Info;
+            public readonly SecuredPeerManager.RemotePeer Peer;
 
-        class Client
-        {
-            public readonly ushort routerID;
-            public readonly SecuredPeerId endPoint;
-            public SecuredPeerId publicEndPoint { get { if (exposeIPAddress) return endPoint; else return null; } }
-            public readonly PlayerInfo info;
-            public readonly bool exposeIPAddress;
-            public Client(SecuredPeerId endPoint, ushort routerID, bool exposeIPAddress, string name="")
+            private bool prospective;
+            public bool Prospective => prospective;
+            public readonly bool ExposeIPAddress;
+
+
+            public bool LobbyOwner => clients.FirstOrDefault() == this;
+            public bool Proxied => Prospective || ExposeIPAddress;
+            public SecuredPeerId PeerID => Peer.id;
+            public string gameLiftSessionID;
+
+            public Client(SecuredPeerId endPoint, ushort RouterID, bool exposeIPAddress, bool prospective, PlayerInfo info, string gameLiftSessionID)
             {
-                RainMeadow.Debug($"New client: {routerID}, {name}");
-                this.routerID = routerID;
-                this.endPoint = endPoint;
-                this.info = new PlayerInfo()
-                {
-                    username = name,
-                    publicKey = LibSodium.BinToHex(endPoint.publicKey!),
-                    sub = "// TODO understand this bullshit",
-                };
-                this.exposeIPAddress = exposeIPAddress;
+                this.prospective = prospective;
+                this.RouterID = RouterID;
+                this.Info = info;
+                this.ExposeIPAddress = exposeIPAddress;
+                this.gameLiftSessionID = gameLiftSessionID;
 
                 if (peerManager is null) throw new InvalidProgrammerException("peerManager is null");
-                peerManager.GetRemotePeer(endPoint, true); // create remotePeer
+                Peer = peerManager.GetRemotePeer(endPoint, true) ?? throw new Exception("Failed to create remote peer"); // create remotePeer
                 peerManager.OnPeerForgotten += OnPeerForgotten;
+
+                clients.Add(this);
+                RainMeadow.Debug($"New client: {this}");
             }
 
-            private void OnPeerForgotten(SecuredPeerManager.RemotePeer forgottenPeer)
+
+            private void OnPeerForgotten(SecuredPeerManager.RemotePeer forgottenPeer, string reason)
             {
-                if (this.endPoint == forgottenPeer.id) RemoveClient();
+                if (this.Peer == forgottenPeer) RemoveClient();
+                RainMeadow.Debug($"Forgot {this}, Reason: {reason}");
             }
 
-            public void RemoveClient()
+            public void RemoveClient(string reason = "")
             {
+                if (gameLift != null)
+                {
+                    gameLift.RemovePlayerSession(gameLiftSessionID);
+                }
+
                 if (peerManager is null) throw new InvalidProgrammerException("peerManager is null");
                 peerManager.OnPeerForgotten -= OnPeerForgotten;
 
                 if (clients.Contains(this))
                 {
-                    RainMeadow.Debug($"Removing client: {routerID}");
+                    RainMeadow.Debug($"Removing client: {this}");
                     clients.Remove(this);
 
-                    var removalPacket = new RouterModifyPlayerListPacket(RouterModifyPlayerListPacket.Operation.Remove, new List<ushort> { routerID });
-                    foreach (Client client in clients)
-                    {
-                        client.Send(removalPacket, PacketReliability.Reliable);
-                    }
-                    peerManager.ForgetPeer(endPoint);
-                    PrintRemainingClients();
-                }
-                if (prospectiveClients.Contains(this))
-                {
-                    RainMeadow.Debug($"Removing prospective client: {routerID}");
-                    prospectiveClients.Remove(this);
-
-                    var removalPacket = new RouterModifyPlayerListPacket(RouterModifyPlayerListPacket.Operation.Remove, new List<ushort> { routerID }) {boxed=true};
-                    clients[0].Send(removalPacket, PacketReliability.Reliable);
-                    peerManager.ForgetPeer(endPoint);
+                    var removalPacket = new RouterModifyPlayerListPacket(RouterModifyPlayerListPacket.Operation.Remove, new List<ushort> { RouterID });
+                    foreach (Client client in clients) client.Send(removalPacket, true);
+                    peerManager.TerminatePeer(Peer, reason);
                     PrintRemainingClients();
                 }
             }
 
-            public void Send(Packet packet, PacketReliability sendType, bool boxed = false)
+            public void Send(Packet packet, bool reliable)
             {
                 if (peerManager is null) throw new InvalidProgrammerException("peerManager is null");
-                SecuredPeerManager.PacketFlags reliable = sendType switch
-                {
-                    PacketReliability.Reliable => SecuredPeerManager.PacketFlags.Reliable,
-                    PacketReliability.Unreliable => SecuredPeerManager.PacketFlags.Unreliable,
-                };
+                SecuredPeerManager.PacketFlags reliableMode = reliable?
+                    SecuredPeerManager.PacketFlags.Reliable : SecuredPeerManager.PacketFlags.Unreliable;
                 using (MemoryStream stream = new())
                 using (BinaryWriter writer = new(stream))
                 {
-                    Packet.Encode(packet, writer, endPoint, IndividualServer.peerManager.Me);
-                    peerManager.Send(stream.GetBuffer(), endPoint, reliable, packet.boxed);
+                    Packet.Encode(packet, writer, PeerID, peerManager.Me);
+                    peerManager.Send(stream.GetBuffer(), PeerID, reliableMode, packet.boxed);
+                }
+            }
+            public override string ToString()
+            {
+                // TODO: undoxx?
+                StringBuilder str = new($"Client #{RouterID} ({PeerID.ToString(false)})");
+                if (prospective) str.Insert(0, "Prospective");
+                return str.ToString();
+            }
+
+            public void FulfillProspective()
+            {
+                if (gameLift != null)
+                {
+                    gameLift.AcceptPlayerSession(gameLiftSessionID);
+                }
+
+                RainMeadow.Debug(PeerID.ToString(false));
+                if (!prospective) return;
+                prospective = false;
+                if (!Proxied)
+                {
+                    // TODO: this should be the first time this client learns of non-host players
+                    var notifyPacketForUnproxied = new RouterModifyPlayerListPacket(
+                        RouterModifyPlayerListPacket.Operation.Update,
+                        [ RouterID ],
+                        [ PeerID ],
+                        [ Info ]
+                    ){ boxed=true };
+
+                    var mutualUnproxiedClients =  clients.Where(x => !x.Proxied && x != this).ToArray();
+
+                    foreach (Client client in mutualUnproxiedClients)
+                        client.Send(notifyPacketForUnproxied, true);
+
+                    Send(new RouterModifyPlayerListPacket(
+                        RouterModifyPlayerListPacket.Operation.Update,
+                        mutualUnproxiedClients.Select(x => x.RouterID).ToList(),
+                        mutualUnproxiedClients.Select(x => (SecuredPeerId?)x.PeerID).ToList(),
+                        mutualUnproxiedClients.Select(x => x.Info).ToList()
+                    ){ boxed=true }, true);
                 }
             }
         }
@@ -110,75 +145,88 @@ namespace RainMeadow.IndividualServer
             PlayerJoiningDecision.ProcessAction += PlayerJoiningDecision_ProcessAction;
         }
 
-        static bool CheckSender(SecuredPeerId processingPeer, ushort fromRouterID, bool allowProsectiveClients = false)
+
+        static bool CheckSender([NotNullWhen(true)] out Client? source, SecuredPeerId processingPeer, ushort fromRouterID, bool allowProsectiveClients = false)
         {
-            var actualSrc = clients.FirstOrDefault(x => x.endPoint.CompareAndUpdate(processingPeer));
-            if (actualSrc is null && allowProsectiveClients) {
-                actualSrc = prospectiveClients.FirstOrDefault(x => x.endPoint.CompareAndUpdate(processingPeer));
+            if (!clients.Any())
+            {
+                RainMeadow.Error("Prospective client attempted to communicate illegally");
+                source = null;
+                return false;
             }
 
-            if (actualSrc is null) {
+            source = clients.First(x => x.PeerID.CompareAndUpdate(processingPeer));
+            if (source.Prospective && !allowProsectiveClients)
+            {
+                RainMeadow.Error("Prospective client attempted to communicate illegally");
+                return false;
+            }
+
+            if (source is null)
+            {
                 RainMeadow.Error("Impersonation attempt! unknown sender disguised as " + fromRouterID.ToString());
                 return false;
-            } else if (fromRouterID != actualSrc.routerID) {
-                RainMeadow.Error("Impersonation attempt! probably-player-"+ actualSrc.routerID.ToString() + " disguised as " + fromRouterID.ToString());
+            }
+            else if (fromRouterID != source.RouterID)
+            {
+                RainMeadow.Error("Impersonation attempt! probably-player-"+ source.RouterID.ToString() + " disguised as " + fromRouterID.ToString());
                 return false;
             }
             return true;
         }
 
-        static void RouteSessionData_ProcessAction(RouteSessionData packet)
+        static void RouteSessionData_ProcessAction(RouteSessionData packet) => ProcessRoutePacket(packet);
+        static void RouterCustomPacket_ProcessAction(RouterCustomPacket packet) => ProcessRoutePacket(packet);
+        static void ProcessRoutePacket(RoutePacket packet)
         {
             // reminder: prospective clients can only communicate with the lobby host
-            var allowProsectiveClients = (packet.toRouterID == clients[0].routerID);
-            if (!CheckSender(packet.processingPeer, packet.fromRouterID, allowProsectiveClients)) { return; }
+            var allowProsectiveClients = packet.toRouterID == clients.FirstOrDefault()?.RouterID || packet.toRouterID == packet.fromRouterID;
+            if (!CheckSender(out var sourceClient, packet.processingPeer ?? throw new InvalidProgrammerException("No processing endpoint"), packet.fromRouterID, allowProsectiveClients)) return;
 
-            if (packet.fromRouterID == packet.toRouterID) {
-                RainMeadow.Error("Client "+ packet.toRouterID.ToString() + " send a packet to themself");
-            }
-            var destinationClient = clients.FirstOrDefault(x => x.routerID == packet.toRouterID);
-            if (destinationClient == null && packet.fromRouterID == clients[0].routerID) {
-                destinationClient = prospectiveClients.FirstOrDefault(x => x.routerID == packet.toRouterID);
-            }
-            if (destinationClient == null) {
-                RainMeadow.Error("received packet for departed client " + packet.toRouterID.ToString());
+            var destinationClient = clients.FirstOrDefault(x => x.RouterID == packet.toRouterID);
+            if (destinationClient == null)
+            {
+                RainMeadow.Error($"Received packet for unknown client #{packet.toRouterID}");
                 return;
             }
-            destinationClient.Send(packet, PacketReliability.Unreliable);
+
+            if (destinationClient.Prospective && !sourceClient.LobbyOwner)
+            {
+                RainMeadow.Error("Only host can communicate with prospective clients " + packet.toRouterID.ToString());
+            }
+
+            destinationClient.Send(packet, false);
         }
 
-        static void RouterCustomPacket_ProcessAction(RouterCustomPacket packet)
-        {
-            if (!CheckSender(packet.processingPeer, packet.fromRouterID)) { return; }
-
-            if (packet.fromRouterID == packet.toRouterID) {
-                RainMeadow.Error("Client "+ packet.toRouterID.ToString() + " send a custom packet to themself");
-            }
-            var destinationClient = clients.FirstOrDefault(x => x.routerID == packet.toRouterID);
-            if (destinationClient == null) {
-                RainMeadow.Error("received custom packet for departed client " + packet.toRouterID.ToString());
-                return;
-            }
-            destinationClient.Send(packet, PacketReliability.Unreliable);
-        }
-
-        const ushort nullrouterID = 0;
+        const ushort nullRouterID = 0;
         static void BeginRouterSession_ProcessAction(BeginRouterSession packet)
         {
-            if (clients.Any(x => x.endPoint == packet.processingPeer)) return;
-            if (prospectiveClients.Any(x => x.endPoint == packet.processingPeer)) return;
-
-            if (clients.Count() == 0) {
-                RainMeadow.Debug("first player must submit a lobby, not try to join one!");
+            if (!packet.boxed)
+            {
+                // proves that they actually own the public key they're using
+                RainMeadow.Error($"Unboxed BeginRouterSession packet from {packet.processingPeer}");
                 return;
             }
 
-            var usedIDs = Enumerable.Concat(
-                clients.Select(x => x.routerID),
-                prospectiveClients.Select(x => x.routerID)
-            );
-            ushort id = 1;
+            PlayerInfo info;
+            if (gameLift != null)
+            {
+                info = gameLift.GetPlayerSession(packet.gameliftID ?? throw new Exception("No gamelift ID???"));
+                byte[] publicKey = Sodium.LibSodium.HexToBin(info.publicKey!);
+                if (!publicKey.SequenceEqual(packet.processingPeer.publicKey))
+                {
+                    RainMeadow.Error($"{packet.processingPeer} has the incorrect public key for {packet.gameliftID}");
+                    return;
+                }
+            }
+            else
+            {
+                info = new PlayerInfo() { username = packet.name };
+            }
 
+            if (clients.Any(x => x.PeerID == packet.processingPeer)) return;
+            var usedIDs = clients.Select(x => x.RouterID);
+            ushort id = 0;
             if (usedIDs.Any())
             {
                 // let's make things more straightforward in case people leave and others join:
@@ -196,131 +244,76 @@ namespace RainMeadow.IndividualServer
                 //     return;
                 // }
             }
-
-            if (id == nullrouterID)
+            else
             {
-                RainMeadow.Error("No available RouterIDs");
+                id = 1;
+            }
+
+            if (peerManager is null) throw new InvalidProgrammerException("peerManager is null");
+            if (id == nullRouterID)
+            {
+                peerManager.TerminatePeer(packet.processingPeer, "No more available router ids");
                 return;
             }
 
-            var newClient = new Client(packet.processingPeer, id, packet.exposeIPAddress, packet.name);
-            prospectiveClients.Add(newClient);
-            Client hostClient = clients[0];
+            var newClient = new Client(packet.processingPeer, id, packet.exposeIPAddress, clients.Any(), info, packet.name);
+            var notifyPacketForProxied = new RouterModifyPlayerListPacket(
+                RouterModifyPlayerListPacket.Operation.Add,
+                [ newClient.RouterID ],
+                [ null ],
+                [ info ]
+            ){ boxed=true };
 
-            hostClient.Send(
-                new RouterModifyPlayerListPacket(
-                    RouterModifyPlayerListPacket.Operation.Add,
-                    new List<ushort> { id },
-                    new List<SecuredPeerId> { null },
-                    new List<PlayerInfo> { new PlayerInfo(){username=packet.name,} }
-                ) {boxed=true},
-                PacketReliability.Reliable
-            );
+            var notifyPacketForUnproxied = newClient.Proxied? notifyPacketForProxied : new RouterModifyPlayerListPacket(
+                RouterModifyPlayerListPacket.Operation.Add,
+                [ newClient.RouterID ],
+                [ newClient.PeerID ],
+                [ info ]
+            ){ boxed=true };
 
-            newClient.Send(
-                new RouterModifyPlayerListPacket(
-                    RouterModifyPlayerListPacket.Operation.Add,
-                    new List<ushort> { hostClient.routerID, id },
-                    new List<SecuredPeerId> { null, null },
-                    new List<PlayerInfo> { new PlayerInfo(){username="HOST",}, new PlayerInfo(){username=packet.name,} }
-                ) {boxed=true},
-                PacketReliability.Reliable
-            );
-            newClient.Send(new JoinRouterLobby(id, IndividualServer.name, IndividualServer.lobbyParams) {boxed=true}, PacketReliability.Reliable);
+            // TODO: somplify next block. also reduce the amount of data prospective players get.
+            foreach (Client client in clients.Where(x => !x.Proxied && x != newClient).ToArray())
+            {
+                client.Send(client.Proxied? notifyPacketForProxied : notifyPacketForUnproxied, true);
+            }
+
+            newClient.Send(new RouterModifyPlayerListPacket(
+                RouterModifyPlayerListPacket.Operation.Add,
+                clients.Select(x => x.RouterID).ToList(),
+                clients.Select(x => x.Proxied? null : x.PeerID).ToList(),
+                clients.Select(x => x.Info).ToList()
+            ), true);
+
+            newClient.Send(new JoinRouterLobby(id, Name, lobbyParameters!), true);
             PrintRemainingClients();
         }
 
-
-        static void PlayerJoiningDecision_ProcessAction(PlayerJoiningDecision packet) {
-            var newClient = prospectiveClients.FirstOrDefault(x => x.routerID == packet.player);
-            if (newClient == null) {return;}
-
-            // FIXME: TOCTOU race here: if somebody joins while the host is leaving
-            var hostClient = clients[0];
-            switch (packet.decision) {
-            case PlayerJoiningDecision.Decision.Reject:
-                newClient.Send(
-                    new RouterModifyPlayerListPacket(
-                        RouterModifyPlayerListPacket.Operation.Remove,
-                        new List<ushort> { hostClient.routerID, newClient.routerID }
-                    ) {boxed=true},
-                    PacketReliability.Reliable
-                );
-                newClient.RemoveClient();  // TODO: delay;
+        static void PlayerJoiningDecision_ProcessAction(PlayerJoiningDecision packet)
+        {
+            if (!clients.Any())
+            {
+                RainMeadow.Error($"Recieved PlayerJoiningDecision from {packet.processingPeer} in an empty lobby");
                 return;
-                break;
-
-            case PlayerJoiningDecision.Decision.Accept:
-                var pkt = new RouterModifyPlayerListPacket(
-                    RouterModifyPlayerListPacket.Operation.Update,
-                    new List<ushort> { hostClient.routerID, newClient.routerID },
-                    new List<SecuredPeerId> { null, null },
-                    new List<PlayerInfo> { hostClient.info, newClient.info }
-                ) {boxed=true};
-                if (newClient.exposeIPAddress) {
-                    pkt.endPoints[0] = hostClient.publicEndPoint;
-                }
-                newClient.Send(pkt, PacketReliability.Reliable);
-
-                pkt = new RouterModifyPlayerListPacket(
-                    RouterModifyPlayerListPacket.Operation.Update,
-                    new List<ushort> { newClient.routerID },
-                    new List<SecuredPeerId> { null },
-                    new List<PlayerInfo> { newClient.info }
-                ) {boxed=true};
-
-                if (hostClient.exposeIPAddress) {
-                    pkt.endPoints[0] = newClient.publicEndPoint;
-                }
-                hostClient.Send(pkt, PacketReliability.Reliable);
-
-                prospectiveClients.Remove(newClient);
-                clients.Add(newClient);
-                break;
             }
 
-
-            var notifyPacketForUnproxied = new RouterModifyPlayerListPacket(
-                RouterModifyPlayerListPacket.Operation.Add,
-                new List<ushort> { newClient.routerID },
-                new List<SecuredPeerId> { newClient.publicEndPoint },
-                new List<PlayerInfo> { newClient.info }
-            ) {boxed=true};
-            var notifyPacketForProxied = new RouterModifyPlayerListPacket(
-                RouterModifyPlayerListPacket.Operation.Add,
-                new List<ushort> { newClient.routerID },
-                new List<SecuredPeerId> { null },
-                new List<PlayerInfo> { newClient.info }
-            ) {boxed=true};
-
-            foreach (Client client in clients)
+            if (!CheckSender(out var source, packet.processingPeer ?? throw new InvalidProgrammerException("No processing endpoint"), clients.First().RouterID, false)) return;
+            if (!source.LobbyOwner)
             {
-                if (hostClient == client) {
-                    // nothing to do
-                }
-                else if (newClient == client)
-                {
-                    // if somebody masks their IP, they don't get to learn any one else's
-                    var endPointList = clients.Select<IndividualServer.Client,SecuredPeerId>(x => null).ToList();
-                    if (client.exposeIPAddress) {
-                        endPointList = clients.Select(x => x.publicEndPoint).ToList();
-                    }
+                RainMeadow.Error($"Recieved PlayerJoiningDecision from non owner source {source}");
+            }
 
-                    client.Send(new RouterModifyPlayerListPacket(
-                        RouterModifyPlayerListPacket.Operation.Add,
-                        clients.Select(x => x.routerID).ToList(),
-                        endPointList,
-                        clients.Select(x => x.info).ToList()
-                        ) {boxed=true},
-                        PacketReliability.Reliable);
-                }
-                else
-                {
-                    if (client.exposeIPAddress)
-                        client.Send(notifyPacketForUnproxied, PacketReliability.Reliable);
-                    else
-                        client.Send(notifyPacketForProxied, PacketReliability.Reliable);
-                }
+            var newClient = clients.FirstOrDefault(x => x.RouterID == packet.player);
+            if (newClient == null) return;
+
+            switch (packet.decision)
+            {
+                case PlayerJoiningDecision.Decision.Reject:
+                    newClient.RemoveClient();
+                    break;
+
+                case PlayerJoiningDecision.Decision.Accept:
+                    if (newClient.Prospective) newClient.FulfillProspective();
+                    break;
             }
 
             PrintRemainingClients();
@@ -328,13 +321,11 @@ namespace RainMeadow.IndividualServer
 
         static void ChatMessage_ProcessAction(RouterChatMessage packet)
         {
-            if (!CheckSender(packet.processingPeer, packet.fromRouterID)) { return; }
-            var senderClient = clients.FirstOrDefault(x => x.routerID == packet.fromRouterID);
+            if (!CheckSender(out var sender, packet.processingPeer, packet.fromRouterID)) { return; }
             foreach (Client client in clients)
             {
-                //if ((senderClient.exposeIPAddress && client.exposeIPAddress) || client.routerID == packet.fromRouterID) { continue; }
-                if (client.routerID == packet.fromRouterID) { continue; }
-                client.Send(packet, PacketReliability.Reliable);
+                if (object.ReferenceEquals(client, sender)) continue;
+                client.Send(packet, true);
             }
         }
     }

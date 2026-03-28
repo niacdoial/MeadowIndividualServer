@@ -4,48 +4,26 @@ using System.Data;
 using System.Diagnostics;
 using System.IO;
 using System.Net;
+using System.Threading;
 using RainMeadow.Shared;
 using RainMeadow.Shared.Models;
 using Sodium;
 
 namespace RainMeadow.IndividualServer
 {
+
     static partial class IndividualServer
     {
-        // networking
-        [CommandLineArgument]
-        public static ushort port = 8720;
 
-        [CommandLineArgument]
-        public static ulong heartbeatTime = 50;
+        public static string Name = "Router Lobby";
+        public static GameLiftManager? gameLift;
+        public static SecuredPeerManager? peerManager = null;
+        public static LobbyParameters? lobbyParameters;
+        public static readonly EventWaitHandle readyLock = new EventWaitHandle(false, EventResetMode.ManualReset);
 
-        [CommandLineArgument]
-        public static ulong timeoutTime = 3000;
-
-        // lobby info
-        public static LobbyParameters lobbyParams = new();
-
-        [CommandLineArgument]
-        public static int maxplayers = 4;
-
-        [CommandLineArgument]
-        public static bool passwordprotected = false;
-
-        [CommandLineArgument]
-        public static string name = "Router Lobby";
-
-        [CommandLineArgument]
-        public static string mode = "Meadow";
-
-        [CommandLineArgument]
-        public static string mods = "";
-
-        [CommandLineArgument]
-        public static string bannedMods = "";
-
-        static SecuredPeerManager? peerManager = null;
         static void Main(string[] args)
         {
+
 
             SharedCodeLogger.DebugInner += RainMeadow.Debug;
             SharedCodeLogger.DebugMeInner += RainMeadow.DebugMe;
@@ -55,27 +33,11 @@ namespace RainMeadow.IndividualServer
             try
             {
                 CommandLineArgumentAttribute.InitializeCommandLine();
-                lobbyParams.MaxPlayers = maxplayers;
-                lobbyParams.PasswordProtected = passwordprotected;
-                lobbyParams.Mode = mode;
-                lobbyParams.Mods = mods;
-                lobbyParams.BannedMods = bannedMods;
+                peerManager = new SecuredPeerManager(CommandLineArguments.port, 10000);
+                RainMeadow.Debug($"Direct connect address is {peerManager.Me.ToString(false)}");
 
-
-                peerManager = new SecuredPeerManager(port, 10000);
                 // TODO: redo this
                 //peerManager.allowPeerCreationWithoutKey = false;  // status-unknown peers are only allowed for LAN
-                if (peerManager is SecuredPeerManager sPMan) {
-                    RainMeadow.Debug($"Direct connect address is {sPMan.Me.ToString()} (note the IP may need to be edited)");
-                } else {
-                    RainMeadow.Debug($"Direct connect address is X.X.X.X:{peerManager.port} where the IP has to be completed");
-                }
-
-                // peerManager.OnPeerForgotten += x =>
-                // {
-                //     RainMeadow.Debug($"{x} was forgotten");
-                // };
-
                 SetupClientEvents();
             }
             catch (Exception except)
@@ -85,15 +47,62 @@ namespace RainMeadow.IndividualServer
             }
 
             RainMeadow.Debug(Stopwatch.Frequency);
+            if (CommandLineArguments.gameLift)
+            {
+                gameLift = new GameLiftManager();
+                gameLift.ProcessSetup();
+            }
+            else
+            {
+                lobbyParameters = new LobbyParameters() {
+                    MaxPlayers = CommandLineArguments.maxplayers,
+                    PasswordProtected = CommandLineArguments.passwordprotected,
+                    Mode = CommandLineArguments.mode,
+                    BannedMods = CommandLineArguments.bannedMods,
+                    Mods = CommandLineArguments.mods};
+                readyLock.Set();
+            }
 
-            // Todo: Alert matchmaking server that we've successfully started listening on a new port
+            Console.CancelKeyPress += (object? sender, ConsoleCancelEventArgs args) =>
+            {
+                ShutDown();
+                args.Cancel = true;
+            };
 
             // Main Lobby
-            while (true)
+            try
             {
+                UpdateLoop();
+            }
+            catch (Exception except)
+            {
+                RainMeadow.Error(except);
+            }
+            OnExit.Invoke();
+        }
 
+        // Shuts Down Connections, Exit the program manually.
+        public static void ShutDown()
+        {
+            RainMeadow.Debug("Shutting down server");
+            if (peerManager is not null)
+            {
+                peerManager.AcceptNewConnections = false;
+                peerManager.TerminateAllPeers("Server shutting down...");
+            }
+        }
+
+        public static event Action OnExit = delegate { };
+
+
+        static void UpdateLoop()
+        {
+            if (peerManager is null) throw new Exception("peerManager is null");
+            while (peerManager.AcceptNewConnections || peerManager.AnyConnection)
+            {
+                readyLock.WaitOne();
                 peerManager.Update();
-                if (peerManager.Receive(out var sender, out var boxed, true) is byte[] data)
+                if (peerManager.Receive(out SecuredPeerId? sender, out bool boxed, true) is byte[] data)
                 {
                     try
                     {
@@ -110,9 +119,7 @@ namespace RainMeadow.IndividualServer
                         RainMeadow.Stacktrace();
                     }
                 }
-
             }
-
         }
     }
 }

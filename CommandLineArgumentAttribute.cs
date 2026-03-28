@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Data;
 using System.IO;
 using System.Linq;
+using System.Linq.Expressions;
 using System.Net;
 using System.Reflection;
 using Microsoft.SqlServer.Server;
@@ -11,7 +12,9 @@ using RainMeadow.Shared;
 namespace RainMeadow.IndividualServer
 {
     [AttributeUsage(AttributeTargets.Field, AllowMultiple = false)]
-    class CommandLineArgumentAttribute : Attribute {
+    class CommandLineArgumentAttribute : Attribute 
+    {
+        
         public static void InitializeCommandLine()
         {
             string[] arguments = Environment.GetCommandLineArgs().Skip(1).ToArray();
@@ -34,7 +37,7 @@ namespace RainMeadow.IndividualServer
             }).ToArray();
 
 
-            var fields = typeof(IndividualServer).GetFields().Where(x => x.IsDefined(typeof(CommandLineArgumentAttribute), true)).ToDictionary(
+            var fields = typeof(CommandLineArguments).GetFields(BindingFlags.Instance | BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public).Where(x => x.IsDefined(typeof(CommandLineArgumentAttribute), true)).ToDictionary(
                 x => x,
                 x => (CommandLineArgumentAttribute)x.GetCustomAttributes(typeof(CommandLineArgumentAttribute), false).First()
             );
@@ -45,6 +48,7 @@ namespace RainMeadow.IndividualServer
                 {
                     var selected = fields.First(x => x.Key.Name.ToLowerInvariant() == arguments[i].ToLowerInvariant());
                     if (arguments[++i] != "=") throw new FormatException($"Expected = as #{i}: {string.Join(" ", arguments)}");
+
                     if (selected.Key.FieldType == typeof(string)) selected.Key.SetValue(null, arguments[++i]);
                     else if (selected.Key.FieldType.GetMethod("Parse", [typeof(string)]) is MethodInfo tryParseMethod)
                     {
@@ -56,7 +60,7 @@ namespace RainMeadow.IndividualServer
                     }
                     else throw new FormatException($"No parsing function for type {selected.Key.FieldType.Name}");
 
-                    RainMeadow.Debug($"set IndividualServer.{selected.Key.Name} to {arguments[i]}");
+                    RainMeadow.Debug($"set {nameof(CommandLineArguments)}.{selected.Key.Name} to {arguments[i]}");
                 }
                 catch (Exception except)
                 {
