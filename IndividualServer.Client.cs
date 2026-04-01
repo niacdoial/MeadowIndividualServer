@@ -71,7 +71,10 @@ namespace RainMeadow.IndividualServer
                     RainMeadow.Debug($"Removing client: {this}");
                     clients.Remove(this);
 
-                    var removalPacket = new RouterModifyPlayerListPacket(RouterModifyPlayerListPacket.Operation.Remove, new List<ushort> { RouterID });
+                    var removalPacket = new RouterModifyPlayerListPacket(
+                        RouterModifyPlayerListPacket.Operation.Remove,
+                        new List<ushort> { RouterID }
+                    ) { boxed=true };
                     foreach (Client client in clients) client.Send(removalPacket, true);
                     peerManager.TerminatePeer(Peer, reason);
                     PrintRemainingClients();
@@ -221,6 +224,11 @@ namespace RainMeadow.IndividualServer
             }
             else
             {
+                if (clients.Count == 0) {
+                    RainMeadow.Debug("In an independent lobby server, the first player must define the lobby");
+                    peerManager.TerminatePeer(packet.processingPeer, "no lobby in this server, please create one");
+                    return;
+                };
                 info = new PlayerInfo() { username = packet.name };
             }
 
@@ -271,7 +279,7 @@ namespace RainMeadow.IndividualServer
                 [ info ]
             ){ boxed=true };
 
-            // TODO: somplify next block. also reduce the amount of data prospective players get.
+            // TODO: reduce the amount of data prospective players get.
             foreach (Client client in clients.Where(x => !x.Proxied && x != newClient).ToArray())
             {
                 client.Send(client.Proxied? notifyPacketForProxied : notifyPacketForUnproxied, true);
@@ -280,11 +288,11 @@ namespace RainMeadow.IndividualServer
             newClient.Send(new RouterModifyPlayerListPacket(
                 RouterModifyPlayerListPacket.Operation.Add,
                 clients.Select(x => x.RouterID).ToList(),
-                clients.Select(x => x.Proxied? null : x.PeerID).ToList(),
+                clients.Select(x => (x.Proxied || newClient.Proxied)? null : x.PeerID).ToList(),
                 clients.Select(x => x.Info).ToList()
-            ), true);
+            ){ boxed=true }, true);
 
-            newClient.Send(new JoinRouterLobby(id, Name, lobbyParameters!), true);
+            newClient.Send(new JoinRouterLobby(id, Name, lobbyParameters!) { boxed=true }, true);
             PrintRemainingClients();
         }
 

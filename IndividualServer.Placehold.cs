@@ -17,6 +17,7 @@ namespace RainMeadow.IndividualServer
 
             if (clients.Count() != 0) {
                 RainMeadow.Debug("Cannot submit a lobby if the server isn't empty!");
+                peerManager.TerminatePeer(packet.processingPeer, "cannot create lobby in nonempty lobbyserver");
                 return;
             }
 
@@ -28,7 +29,7 @@ namespace RainMeadow.IndividualServer
                 CapeEntry=null
             };
 
-            clients.Add(new Client(packet.processingPeer, 1, packet.exposeIPAddress, false, plInfo, packet.userName));
+            new Client(packet.processingPeer, 1, packet.exposeIPAddress, false, plInfo, packet.userName);
 
             // TODO: protection against double-sending? or do we trust the host not to jank this up?
             RainMeadow.Debug("Received new lobby");
