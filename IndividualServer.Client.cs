@@ -316,7 +316,7 @@ namespace RainMeadow.IndividualServer
             switch (packet.decision)
             {
                 case PlayerJoiningDecision.Decision.Reject:
-                    newClient.RemoveClient();
+                    newClient.RemoveClient("Connection refused by host. Wrong password?");
                     break;
 
                 case PlayerJoiningDecision.Decision.Accept:
