@@ -95,8 +95,20 @@ namespace RainMeadow.IndividualServer
             }
             public override string ToString()
             {
+                return ToString(false);
+            }
+            public string ToString(bool forLogs)
+            {
                 // TODO: undoxx?
-                StringBuilder str = new($"Client #{RouterID} ({PeerID.ToString(false)})");
+                StringBuilder str = new($"Client #{RouterID}");
+                if (forLogs)
+                {
+                    str.Append($" ({PeerID.ToLogString()})");
+                }
+                else
+                {
+                    str.Append($" ({PeerID.ToString(false)})");
+                }
                 if (prospective) str.Insert(0, "Prospective");
                 return str.ToString();
             }
@@ -108,7 +120,7 @@ namespace RainMeadow.IndividualServer
                     gameLift.AcceptPlayerSession(gameLiftSessionID);
                 }
 
-                RainMeadow.Debug(PeerID.ToString(false));
+                RainMeadow.Debug(PeerID.ToLogString());
                 if (!prospective) return;
                 prospective = false;
                 if (!Proxied)
